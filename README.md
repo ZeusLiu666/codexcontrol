@@ -1,37 +1,46 @@
-# CodexControl · ZeusLiu 定制版
+# CodexControl 1.2.8 · 由 ZeusLiu 更新 / Updated by ZeusLiu
 
-基于 [Adem Isler 的 CodexControl](https://github.com/ademisler/codexcontrol) 修改，原项目采用 MIT 许可证。定制与维护署名：**ZeusLiu**。这不是原作者的官方发行版。
+A macOS menu-bar app for Codex accounts and usage, based on [CodexControl by Adem Isler](https://github.com/ademisler/codexcontrol), under the MIT License. Updated by **ZeusLiu**.
 
-## 安装
+用于管理 Codex 账户和查看用量的 macOS 菜单栏应用，基于 [Adem Isler 的 CodexControl](https://github.com/ademisler/codexcontrol)，遵循 MIT 许可证。由 **ZeusLiu** 更新。
 
-适用于 **Apple Silicon（M1 及后续芯片）和 macOS 14 或更新版本**。
+## Download and install / 下载与安装
 
-1. 从本仓库的 Releases 下载 `CodexControl-1.2.8-macos-arm64.dmg`。
-2. 退出正在运行的 CodexControl，打开磁盘映像。
-3. 将 `CodexControl.app` 拖入 `Applications`。
-4. 从“应用程序”启动，通过菜单栏图标打开面板。
+Requires **Apple Silicon (M1 or newer) and macOS 14 or later**. Version **1.2.8, build 17** updates the bundled wording and release metadata; app features are unchanged from build 16.
 
-也可使用同一 Release 中的 `.pkg` 标准安装器。两种方式安装同一个应用，只需选择一种。
+需要 **Apple Silicon（M1 或更新芯片）和 macOS 14 或更新版本**。当前版本为 **1.2.8，构建 17**，本次更新随包文案与发布元数据，应用功能与构建 16 相同。
 
-当前发行版为 **1.2.8，构建 16**，使用本地临时签名，尚未经过 Apple Developer ID 签名及公证。macOS 可能提示验证限制。本包不会更改系统安全设置。
+1. Download `CodexControl-1.2.8-macos-arm64.dmg` from this repository’s Releases. / 从本仓库 Releases 下载 `CodexControl-1.2.8-macos-arm64.dmg`。
+2. Quit CodexControl, open the disk image, and drag `CodexControl.app` into `Applications`. / 退出 CodexControl，打开磁盘映像，将 `CodexControl.app` 拖入 `Applications`。
+3. Launch it from Applications and click its menu-bar icon. / 从“应用程序”启动，点击菜单栏图标打开面板。
 
-## 本版功能
+You can also use `CodexControl-1.2.8-macos-arm64.pkg` from the same Release. Both install the same app; choose either one. Download checksums are in `SHA256SUMS.txt`.
 
-- 每日用量方格支持悬停查看完整日期与精确 token 数量；点击固定，关闭按钮或 Escape 收起。
-- 展示输入、缓存输入、输出与推理数量，标明包含关系。
-- 改善菜单栏卡片、剩余额度、重置时间、状态消息和刷新反馈。
-- 保留多账户切换、用量统计和桌面小组件。
-- 远程用量采集改为本机显式配置，默认不连接任何服务器。
+也可选择同一 Release 中的 `CodexControl-1.2.8-macos-arm64.pkg` 标准安装器。两者安装的是同一个应用，任选一种即可。下载文件的校验值见 `SHA256SUMS.txt`。
 
-## 隐私与发布范围
+The app is ad-hoc signed and has not been notarized by Apple. macOS may show a verification warning.
 
-安装包仅包含应用程序、图标和署名/许可证文档。源码归档仅包含 macOS 所需源码、测试和构建脚本。两者均不包含个人账户、邮箱、登录 token、SSH 密钥或配置、服务器地址、用量历史、会话日志、真实账户截图和本机构建目录。
+应用使用本地临时签名（ad-hoc），尚未经过 Apple 公证，macOS 可能显示验证提示。
 
-安装后的账户与用量数据来自运行该应用的电脑。为兼容旧版本，应用继续使用 `~/Library/Application Support/CodexControl`；已有本机账户可能会正常显示。这里的数据不在安装包内。
+## Features / 功能
 
-## 可选远程用量
+- Hover over a daily usage square to see its full date and exact token counts. Click to pin the details; close them with the close button or Escape. / 悬停在每日用量方格上，可查看完整日期和精确 token 数量；点击固定详情，使用关闭按钮或 Escape 收起。
+- View input, cached input, output, and reasoning counts, with their inclusion relationships made clear. / 查看输入、缓存输入、输出和推理数量，并了解各项的包含关系。
+- Clearer menu-bar cards, remaining limits, reset times, status messages, and refresh feedback. / 改善菜单栏卡片、剩余额度、重置时间、状态消息和刷新反馈。
+- Account switching, usage tracking, and desktop widgets. / 支持账户切换、用量统计和桌面小组件。
+- Optional remote usage collection, disabled until you configure it locally. / 支持可选远程用量采集，默认关闭，需在本机配置后启用。
 
-在本机创建 `~/Library/Application Support/CodexControl/remote-hosts.json`：
+## Local data / 本机数据
+
+The downloads contain no personal accounts, authentication tokens, SSH keys or configuration, server addresses, usage history, session logs, or personal account screenshots. The app uses data on the computer where it runs. For compatibility, it keeps using `~/Library/Application Support/CodexControl`, so existing local accounts may appear when you launch it.
+
+下载内容不包含个人账户、登录 token、SSH 密钥或配置、服务器地址、用量历史、会话日志或真实账户截图。应用读取运行它的电脑上的数据，并为兼容已有版本继续使用 `~/Library/Application Support/CodexControl`，因此启动后可能显示本机已有的账户。
+
+## Optional remote usage / 可选远程用量
+
+To enable remote collection, create `~/Library/Application Support/CodexControl/remote-hosts.json` on your computer:
+
+如需启用远程采集，请在本机创建 `~/Library/Application Support/CodexControl/remote-hosts.json`：
 
 ```json
 [
@@ -40,11 +49,19 @@
 ]
 ```
 
-这些名称是示例，须对应你自己的 `~/.ssh/config` 别名，并预先配置好非交互式 SSH 身份验证。不要把实际配置、密钥或密码提交到仓库。程序不会保存 SSH 密码。未提供配置时不运行远程采集。
+Replace these examples with your own `~/.ssh/config` aliases and set up non-interactive SSH authentication first. Keep your actual configuration and credentials local. The app does not store SSH passwords or collect remote usage without this configuration.
 
-## 从源码构建
+请将示例名称替换为自己的 `~/.ssh/config` 别名，并提前配置非交互式 SSH 身份验证。实际配置与凭据请保留在本机。应用不保存 SSH 密码；未提供此配置时，不采集远程用量。
 
-从 Release 下载 `CodexControl-1.2.8-source-sanitized.zip` 并解压，进入 `CodexControl` 文件夹。需要 Swift 6.1 或更新版本及可用的 macOS 开发工具：
+## Build from source / 从源码构建
+
+Download **`CodexControl-1.2.8-source-sanitized.zip`** from the Release assets, extract it, and open the `CodexControl` folder. This is the app’s source archive. GitHub’s automatically generated **Source code (zip/tar.gz)** downloads contain only this distribution repository’s documentation, not the app source.
+
+请从 Release 附件下载 **`CodexControl-1.2.8-source-sanitized.zip`**，解压后进入 `CodexControl` 文件夹。这份手动上传的附件包含应用源码；GitHub 自动生成的 **Source code (zip/tar.gz)** 仅包含本分发仓库的文档，不包含应用源码。
+
+You will need Swift 6.1 or later and the macOS development tools:
+
+需要 Swift 6.1 或更新版本及 macOS 开发工具：
 
 ```sh
 swift test
@@ -52,13 +69,20 @@ swift test
 ./Scripts/build_installers.sh
 ```
 
-`package_app.sh` 会编译应用和 Widget，并将完整 LICENSE、NOTICE 放入应用资源。默认使用本地临时签名；设置 `CODE_SIGN_IDENTITY` 可使用自己的 Developer ID Application 证书。安装包生成在 `ReleaseArtifacts`，源码归档不会包含该目录。
+`package_app.sh` builds the app and widget and bundles the complete LICENSE and NOTICE. It uses ad-hoc signing by default; set `CODE_SIGN_IDENTITY` to use your own Developer ID Application certificate. Installers are written to `ReleaseArtifacts`, which is excluded from the source archive.
 
-本仓库先保持 Private，不添加协作者。安装包和源码备份存放在私有 Release 中。
+`package_app.sh` 会构建应用和小组件，并随包附上完整 LICENSE 与 NOTICE。默认使用本地临时签名；设置 `CODE_SIGN_IDENTITY` 可使用自己的 Developer ID Application 证书。安装包输出到 `ReleaseArtifacts`，源码归档不包含该目录。
 
-## 署名与许可
+The app previously passed all 18 tests. Build 17 changes only documentation and release metadata; those tests were not rerun for this update.
 
-- 原作者：**Adem Isler** — [ademisler/codexcontrol](https://github.com/ademisler/codexcontrol)
-- 修改版作者：**ZeusLiu**
-- 许可证：[MIT](LICENSE)
-- 详细归属：[NOTICE](NOTICE)
+应用此前已通过全部 18 项测试。构建 17 仅更新文档和发布元数据，本次更新未重新运行这些测试。
+
+## Credits and license / 署名与许可
+
+Original author / 原作者：**Adem Isler** — [ademisler/codexcontrol](https://github.com/ademisler/codexcontrol)
+
+**由 ZeusLiu 更新 / Updated by ZeusLiu**
+
+Released under the [MIT License](LICENSE). See [NOTICE](NOTICE) for attribution. This release is maintained by ZeusLiu independently of the original author.
+
+遵循 [MIT 许可证](LICENSE)，详细归属见 [NOTICE](NOTICE)。本次发布由 ZeusLiu 独立维护。
