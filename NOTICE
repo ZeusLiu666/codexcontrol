@@ -1,0 +1,18 @@
+CodexControl — customized macOS edition
+
+Original author: Adem Isler
+Original project: https://github.com/ademisler/codexcontrol
+Original website: https://codexcontrol.app
+Copyright (c) 2026 Adem Isler
+
+Modifications and private distribution: ZeusLiu
+Copyright (c) 2026 ZeusLiu (modifications)
+
+Distributed under the MIT License; see LICENSE for the full terms.
+This customized edition is not an official release by the original author.
+The original project name, icon, and upstream identifiers are retained for
+attribution and compatibility.
+
+This edition includes daily token details, menu-bar UI improvements, token
+tracking and widgets, and opt-in remote usage configuration. No personal
+accounts, authentication data, usage history, or SSH configuration is included.
