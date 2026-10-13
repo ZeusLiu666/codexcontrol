@@ -1,26 +1,41 @@
-CodexControl — 由 ZeusLiu 更新 / Updated by ZeusLiu
+CodexControl — Updated by ZeusLiu
 
-Original author / 原作者: Adem Isler
-Original project / 原项目: https://github.com/ademisler/codexcontrol
-Original website / 原网站: https://codexcontrol.app
+Original author: Adem Isler
+Original project: https://github.com/ademisler/codexcontrol
+Original website: https://codexcontrol.app
 Copyright (c) 2026 Adem Isler
 
-由 ZeusLiu 更新 / Updated by ZeusLiu
+Updated by ZeusLiu
 Copyright (c) 2026 ZeusLiu
 
 Distributed under the MIT License; see LICENSE for the full terms.
-遵循 MIT 许可证；完整条款见 LICENSE。
 
 This release is maintained by ZeusLiu independently of the original author.
 The original project name, icon, and upstream identifiers are retained for
 attribution and compatibility.
-本次发布由 ZeusLiu 独立维护。为保留归属与兼容性，继续使用原项目名称、
-图标和上游标识符。
 
 Updates include daily token details, menu-bar and status improvements, and
 opt-in remote usage configuration. Account switching, usage tracking, and
 widgets remain available. No personal accounts, authentication data, usage
 history, or SSH configuration is included in the downloads.
+
+---
+
+CodexControl — 由 ZeusLiu 更新
+
+原作者：Adem Isler
+原项目：https://github.com/ademisler/codexcontrol
+原网站：https://codexcontrol.app
+Copyright (c) 2026 Adem Isler
+
+由 ZeusLiu 更新
+Copyright (c) 2026 ZeusLiu
+
+遵循 MIT 许可证；完整条款见 LICENSE。
+
+本次发布由 ZeusLiu 独立维护。为保留归属与兼容性，继续使用原项目名称、
+图标和上游标识符。
+
 更新涵盖每日 token 详情、菜单栏与状态显示，以及可选远程用量配置。
 保留账户切换、用量统计和小组件；下载内容不包含个人账户、登录凭据、
 用量历史或 SSH 配置。
