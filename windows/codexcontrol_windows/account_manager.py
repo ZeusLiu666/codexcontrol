@@ -1,0 +1,592 @@
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import signal
+import subprocess
+import threading
+import time
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from uuid import UUID, uuid4
+
+from . import codex_binary_locator
+from .codex_api import AuthBackedIdentity, CodexApiError, load_identity
+from .file_locations import (
+    AMBIENT_CODEX_HOME,
+    AUTH_BACKUPS_DIRECTORY,
+    DESKTOP_SESSION_SNAPSHOT_DIRECTORY_NAME,
+    MANAGED_HOMES_DIRECTORY,
+    codex_desktop_session_root,
+    ensure_directories,
+)
+from .models import StoredAccount, StoredAccountSource, utc_now
+
+
+class CodexAccountManagerError(RuntimeError):
+    """Friendly account manager error."""
+
+
+@dataclass(slots=True)
+class CodexLoginResult:
+    outcome: str
+    output: str
+
+
+@dataclass(slots=True)
+class CodexSwitchResult:
+    materialized_account: StoredAccount | None
+    backup_path: str | None
+    ambient_account: StoredAccount | None
+    desktop_session_backup_path: str | None
+    desktop_session_restore_path: str | None
+    desktop_session_restore_exists: bool
+    target_auth_path: str | None = None
+    ambient_auth_path: str | None = None
+
+
+class ManagedLoginProcess:
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._process: subprocess.Popen[str] | None = None
+        self._cancelled = False
+
+    def bind(self, process: subprocess.Popen[str]) -> None:
+        with self._lock:
+            self._process = process
+            cancelled = self._cancelled
+        # A queued login can be cancelled before Popen returns. Preserve that
+        # request and terminate its late-bound child outside the state lock.
+        if cancelled:
+            self._stop_process(process)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._process = None
+
+    @property
+    def cancelled(self) -> bool:
+        with self._lock:
+            return self._cancelled
+
+    def cancel(self) -> None:
+        with self._lock:
+            process = self._process
+            self._cancelled = True
+
+        self._stop_process(process)
+
+    @staticmethod
+    def _stop_process(process: subprocess.Popen[str] | None) -> None:
+        if process is None or process.poll() is not None:
+            return
+
+        try:
+            process.send_signal(signal.SIGINT)
+        except OSError:
+            pass
+
+        try:
+            process.terminate()
+            process.wait(timeout=0.75)
+        except (OSError, subprocess.TimeoutExpired):
+            try:
+                process.kill()
+            except OSError:
+                pass
+
+
+class CodexLoginRunner:
+    @staticmethod
+    def run(home_path: str, timeout: float = 180, handle: ManagedLoginProcess | None = None) -> CodexLoginResult:
+        active_handle = handle or ManagedLoginProcess()
+        binary = codex_binary_locator.resolve()
+        if not binary:
+            return CodexLoginResult(outcome="missing_binary", output="")
+
+        env = os.environ.copy()
+        env["CODEX_HOME"] = home_path
+
+        try:
+            process = subprocess.Popen(
+                [binary, "login"],
+                stdin=subprocess.DEVNULL,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                env=env,
+            )
+        except OSError as error:
+            return CodexLoginResult(outcome="launch_failed", output=str(error))
+
+        active_handle.bind(process)
+        try:
+            stdout, stderr = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            try:
+                process.terminate()
+                process.wait(timeout=0.75)
+            except (OSError, subprocess.TimeoutExpired):
+                try:
+                    process.kill()
+                except OSError:
+                    pass
+            stdout, stderr = _read_remaining_output(process)
+            active_handle.clear()
+            return CodexLoginResult(outcome="timed_out", output=_combine_output(stdout, stderr))
+
+        active_handle.clear()
+        output = _combine_output(stdout, stderr)
+        if active_handle.cancelled:
+            return CodexLoginResult(outcome="cancelled", output=output)
+        if process.returncode == 0:
+            return CodexLoginResult(outcome="success", output=output)
+        return CodexLoginResult(outcome="failed", output=output)
+
+
+class CodexAccountManager:
+    def add_managed_account(self, handle: ManagedLoginProcess | None = None) -> StoredAccount:
+        ensure_directories()
+        home_path = MANAGED_HOMES_DIRECTORY / str(uuid4())
+        home_path.mkdir(parents=True, exist_ok=True)
+
+        try:
+            return self._authenticate_account(home_path, StoredAccountSource.MANAGED_BY_APP, handle=handle)
+        except Exception:
+            shutil.rmtree(home_path, ignore_errors=True)
+            raise
+
+    def reauthenticate(self, account: StoredAccount, handle: ManagedLoginProcess | None = None) -> StoredAccount:
+        return self._authenticate_account(
+            Path(account.codex_home_path),
+            account.source,
+            existing=account,
+            handle=handle,
+        )
+
+    def remove_managed_files_if_owned(self, account: StoredAccount) -> None:
+        if not account.source.owns_files:
+            return
+
+        root = MANAGED_HOMES_DIRECTORY.resolve(strict=False)
+        targets = self._managed_home_paths_matching(account)
+
+        for target in targets:
+            try:
+                target.relative_to(root)
+            except ValueError as error:
+                raise CodexAccountManagerError("This path is not an app-managed home directory.") from error
+
+            if target.exists():
+                shutil.rmtree(target, ignore_errors=False)
+
+    def discover_managed_accounts(self, existing: list[StoredAccount]) -> list[StoredAccount]:
+        ensure_directories()
+        discovered: list[StoredAccount] = []
+        for home_path in sorted(MANAGED_HOMES_DIRECTORY.iterdir(), key=lambda item: item.name.lower()):
+            candidate = self._discovered_managed_account(home_path, existing)
+            if candidate is not None:
+                discovered.append(candidate)
+        return discovered
+
+    def discover_ambient_account(self, existing: list[StoredAccount]) -> StoredAccount | None:
+        home_path = AMBIENT_CODEX_HOME
+        auth_path = home_path / "auth.json"
+        if not home_path.is_dir() or not auth_path.exists():
+            return None
+
+        try:
+            identity = load_identity(str(home_path))
+        except CodexApiError:
+            return None
+
+        if not identity.email and not identity.provider_account_id:
+            return None
+
+        discovered_at = _directory_timestamp(home_path)
+        candidate = StoredAccount(
+            id=uuid4(),
+            nickname=None,
+            email_hint=identity.email,
+            auth_subject=identity.auth_subject,
+            provider_account_id=identity.provider_account_id,
+            codex_home_path=str(home_path),
+            source=StoredAccountSource.AMBIENT,
+            created_at=discovered_at,
+            updated_at=discovered_at,
+            last_authenticated_at=discovered_at,
+        )
+
+        matched_existing = next((account for account in existing if account.matches(candidate)), None)
+        return StoredAccount(
+            id=matched_existing.id if matched_existing else uuid4(),
+            nickname=matched_existing.nickname if matched_existing else None,
+            email_hint=identity.email or (matched_existing.email_hint if matched_existing else None),
+            auth_subject=identity.auth_subject or (matched_existing.auth_subject if matched_existing else None),
+            provider_account_id=identity.provider_account_id or (
+                matched_existing.provider_account_id if matched_existing else None
+            ),
+            codex_home_path=str(home_path),
+            source=StoredAccountSource.AMBIENT,
+            created_at=matched_existing.created_at if matched_existing else discovered_at,
+            updated_at=max(
+                matched_existing.updated_at if matched_existing else discovered_at,
+                discovered_at,
+            ),
+            last_authenticated_at=matched_existing.last_authenticated_at if matched_existing else discovered_at,
+        )
+
+    def load_active_identity(self) -> AuthBackedIdentity | None:
+        auth_path = AMBIENT_CODEX_HOME / "auth.json"
+        if not auth_path.exists():
+            return None
+
+        try:
+            return load_identity(str(AMBIENT_CODEX_HOME))
+        except CodexApiError:
+            return None
+
+    def switch_active_account(self, target: StoredAccount, existing: list[StoredAccount]) -> CodexSwitchResult:
+        ensure_directories()
+
+        target_auth_path = Path(target.codex_home_path) / "auth.json"
+        if not target_auth_path.exists():
+            raise CodexAccountManagerError("The selected account does not contain `auth.json`.")
+
+        ambient_account = self.discover_ambient_account(existing)
+        session_root = codex_desktop_session_root()
+        materialized_account: StoredAccount | None = None
+        if ambient_account is not None and ambient_account.source is StoredAccountSource.AMBIENT and not ambient_account.matches(target):
+            materialized_account = self.materialize_as_managed(ambient_account)
+
+        desktop_session_backup_path: str | None = None
+        desktop_session_restore_path: str | None = None
+        desktop_session_restore_exists = False
+        if session_root is not None:
+            if materialized_account is not None:
+                desktop_session_backup_path = str(self._desktop_session_snapshot_path(materialized_account.codex_home_path))
+
+            desktop_session_snapshot_path = self._desktop_session_snapshot_path(target.codex_home_path)
+            desktop_session_restore_path = str(desktop_session_snapshot_path)
+            desktop_session_restore_exists = _path_has_children(desktop_session_snapshot_path)
+
+        AMBIENT_CODEX_HOME.mkdir(parents=True, exist_ok=True)
+        backup_path = self._backup_ambient_auth()
+        shutil.copy2(target_auth_path, AMBIENT_CODEX_HOME / "auth.json")
+        self._sync_ambient_global_state(
+            previous_account_id=ambient_account.provider_account_id if ambient_account is not None else None,
+            target_account_id=self._target_account_id(target),
+        )
+
+        return CodexSwitchResult(
+            materialized_account=materialized_account,
+            backup_path=backup_path,
+            ambient_account=self.discover_ambient_account(existing),
+            desktop_session_backup_path=desktop_session_backup_path,
+            desktop_session_restore_path=desktop_session_restore_path,
+            desktop_session_restore_exists=desktop_session_restore_exists,
+            target_auth_path=str(target_auth_path),
+            ambient_auth_path=str(AMBIENT_CODEX_HOME / "auth.json"),
+        )
+
+    def materialize_as_managed(self, account: StoredAccount) -> StoredAccount:
+        ensure_directories()
+
+        source_auth_path = Path(account.codex_home_path) / "auth.json"
+        if not source_auth_path.exists():
+            raise CodexAccountManagerError("The current active account does not contain `auth.json`.")
+
+        destination_home = MANAGED_HOMES_DIRECTORY / str(uuid4())
+        destination_home.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source_auth_path, destination_home / "auth.json")
+
+        now = utc_now()
+        return StoredAccount(
+            id=account.id,
+            nickname=account.nickname,
+            email_hint=account.email_hint,
+            auth_subject=account.auth_subject,
+            provider_account_id=account.provider_account_id,
+            codex_home_path=str(destination_home),
+            source=StoredAccountSource.MANAGED_BY_APP,
+            created_at=account.created_at,
+            updated_at=now,
+            last_authenticated_at=account.last_authenticated_at or now,
+        )
+
+    def _backup_ambient_auth(self) -> str | None:
+        ensure_directories()
+        auth_path = AMBIENT_CODEX_HOME / "auth.json"
+        if not auth_path.exists():
+            return None
+
+        backup_path = AUTH_BACKUPS_DIRECTORY / f"ambient-auth-{_timestamp_slug()}.json"
+        shutil.copy2(auth_path, backup_path)
+        return str(backup_path)
+
+    def _target_account_id(self, target: StoredAccount) -> str | None:
+        if target.provider_account_id:
+            return target.provider_account_id
+
+        try:
+            identity = load_identity(target.codex_home_path)
+        except CodexApiError:
+            return None
+
+        return identity.provider_account_id
+
+    def _desktop_session_snapshot_path(self, home_path: str | Path) -> Path:
+        return Path(home_path) / DESKTOP_SESSION_SNAPSHOT_DIRECTORY_NAME
+
+    def _sync_ambient_global_state(self, previous_account_id: str | None, target_account_id: str | None) -> None:
+        if not target_account_id:
+            return
+
+        for file_name in (".codex-global-state.json", ".codex-global-state.json.bak"):
+            self._rewrite_creator_id(
+                AMBIENT_CODEX_HOME / file_name,
+                previous_account_id=previous_account_id,
+                target_account_id=target_account_id,
+            )
+
+    def _rewrite_creator_id(
+        self,
+        path: Path,
+        previous_account_id: str | None,
+        target_account_id: str,
+    ) -> None:
+        if not path.exists():
+            return
+
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return
+
+        if not isinstance(payload, dict):
+            return
+
+        atom_state = payload.get("electron-persisted-atom-state")
+        if not isinstance(atom_state, dict):
+            return
+
+        environment = atom_state.get("environment")
+        if not isinstance(environment, dict):
+            return
+
+        creator_id = environment.get("creator_id")
+        updated_creator_id = _updated_creator_id(creator_id, previous_account_id, target_account_id)
+        if updated_creator_id is None or updated_creator_id == creator_id:
+            return
+
+        environment["creator_id"] = updated_creator_id
+        path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+    def _managed_home_paths_matching(self, account: StoredAccount) -> set[Path]:
+        ensure_directories()
+        targets = {Path(account.codex_home_path).resolve(strict=False)}
+        seen_keys = {_managed_home_key(next(iter(targets)))}
+
+        for home_path in MANAGED_HOMES_DIRECTORY.iterdir():
+            candidate = self._discovered_managed_account(home_path, [account])
+            if candidate is None or not candidate.matches(account):
+                continue
+
+            resolved = home_path.resolve(strict=False)
+            key = _managed_home_key(resolved)
+            if key in seen_keys:
+                continue
+            targets.add(resolved)
+            seen_keys.add(key)
+
+        return targets
+
+    def _authenticate_account(
+        self,
+        home_path: Path,
+        source: StoredAccountSource,
+        existing: StoredAccount | None = None,
+        handle: ManagedLoginProcess | None = None,
+    ) -> StoredAccount:
+        result = CodexLoginRunner.run(str(home_path), handle=handle)
+
+        if result.outcome == "cancelled":
+            raise CodexAccountManagerError("Account setup cancelled.")
+        if result.outcome == "missing_binary":
+            raise CodexAccountManagerError("The `codex` command could not be found.")
+        if result.outcome == "timed_out":
+            raise CodexAccountManagerError("The Codex sign-in flow timed out.")
+        if result.outcome == "launch_failed":
+            raise CodexAccountManagerError(f"Failed to start the Codex sign-in flow: {result.output}")
+        if result.outcome == "failed":
+            raise CodexAccountManagerError(f"The Codex sign-in flow did not complete.\n{result.output}")
+
+        try:
+            identity = load_identity(str(home_path))
+        except CodexApiError as error:
+            raise CodexAccountManagerError(str(error)) from error
+
+        if not identity.email and not identity.provider_account_id:
+            raise CodexAccountManagerError("Sign-in completed, but the account identity could not be read.")
+
+        now = utc_now()
+        return StoredAccount(
+            id=existing.id if existing else uuid4(),
+            nickname=existing.nickname if existing else None,
+            email_hint=identity.email or (existing.email_hint if existing else None),
+            auth_subject=identity.auth_subject or (existing.auth_subject if existing else None),
+            provider_account_id=identity.provider_account_id or (existing.provider_account_id if existing else None),
+            codex_home_path=str(home_path),
+            source=source,
+            created_at=existing.created_at if existing else now,
+            updated_at=now,
+            last_authenticated_at=now,
+        )
+
+    def _discovered_managed_account(self, home_path: Path, existing: list[StoredAccount]) -> StoredAccount | None:
+        if not home_path.is_dir():
+            return None
+
+        auth_path = home_path / "auth.json"
+        if not auth_path.exists():
+            return None
+
+        try:
+            identity = load_identity(str(home_path))
+        except CodexApiError:
+            return None
+
+        if not identity.email and not identity.provider_account_id:
+            return None
+
+        discovered_at = _directory_timestamp(home_path)
+        candidate = StoredAccount(
+            id=uuid4(),
+            nickname=None,
+            email_hint=identity.email,
+            auth_subject=identity.auth_subject,
+            provider_account_id=identity.provider_account_id,
+            codex_home_path=str(home_path),
+            source=StoredAccountSource.MANAGED_BY_APP,
+            created_at=discovered_at,
+            updated_at=discovered_at,
+            last_authenticated_at=discovered_at,
+        )
+
+        matched_existing = next((account for account in existing if account.matches(candidate)), None)
+        return StoredAccount(
+            id=matched_existing.id if matched_existing else uuid4(),
+            nickname=matched_existing.nickname if matched_existing else None,
+            email_hint=identity.email or (matched_existing.email_hint if matched_existing else None),
+            auth_subject=identity.auth_subject or (matched_existing.auth_subject if matched_existing else None),
+            provider_account_id=identity.provider_account_id or (
+                matched_existing.provider_account_id if matched_existing else None
+            ),
+            codex_home_path=str(home_path),
+            source=StoredAccountSource.MANAGED_BY_APP,
+            created_at=matched_existing.created_at if matched_existing else discovered_at,
+            updated_at=max(
+                matched_existing.updated_at if matched_existing else discovered_at,
+                discovered_at,
+            ),
+            last_authenticated_at=max(
+                matched_existing.last_authenticated_at if matched_existing and matched_existing.last_authenticated_at else discovered_at,
+                discovered_at,
+            ),
+        )
+
+
+def _combine_output(stdout: str | None, stderr: str | None) -> str:
+    merged = "\n".join(part.strip() for part in (stdout or "", stderr or "") if part and part.strip()).strip()
+    return merged[:4000] if merged else "No output captured."
+
+
+def _read_remaining_output(process: subprocess.Popen[str]) -> tuple[str, str]:
+    stdout = ""
+    stderr = ""
+    for _ in range(5):
+        if process.poll() is not None:
+            break
+        time.sleep(0.1)
+
+    if process.stdout is not None:
+        try:
+            stdout = process.stdout.read()
+        except OSError:
+            stdout = ""
+    if process.stderr is not None:
+        try:
+            stderr = process.stderr.read()
+        except OSError:
+            stderr = ""
+    return stdout, stderr
+
+
+def _directory_timestamp(path: Path):
+    auth_path = path / "auth.json"
+    if auth_path.exists():
+        return datetime.fromtimestamp(auth_path.stat().st_mtime, tz=timezone.utc)
+
+    stat = path.stat()
+    return datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
+
+
+def _managed_home_key(path: Path) -> str:
+    return os.path.normcase(os.path.abspath(os.path.normpath(path)))
+
+
+def _updated_creator_id(
+    creator_id: object,
+    previous_account_id: str | None,
+    target_account_id: str,
+) -> str | None:
+    if not isinstance(creator_id, str):
+        return None
+
+    normalized = creator_id.strip()
+    if not normalized:
+        return None
+
+    if normalized == target_account_id or normalized.endswith(f"__{target_account_id}"):
+        return normalized
+
+    if previous_account_id and previous_account_id in normalized:
+        return normalized.replace(previous_account_id, target_account_id)
+
+    if _looks_like_uuid(normalized):
+        return target_account_id
+
+    if "__" in normalized:
+        prefix, suffix = normalized.rsplit("__", maxsplit=1)
+        if _looks_like_uuid(suffix):
+            return f"{prefix}__{target_account_id}"
+
+    return None
+
+
+def _looks_like_uuid(value: str) -> bool:
+    try:
+        UUID(value)
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
+def _path_has_children(path: Path) -> bool:
+    if not path.exists() or not path.is_dir():
+        return False
+
+    try:
+        next(path.iterdir())
+    except (OSError, StopIteration):
+        return False
+    return True
+
+
+def _timestamp_slug() -> str:
+    return utc_now().strftime("%Y%m%d-%H%M%S")

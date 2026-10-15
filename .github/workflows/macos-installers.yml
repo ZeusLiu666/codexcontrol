@@ -1,0 +1,38 @@
+name: Build sanitized macOS installers
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check source privacy
+        run: python3 tools/release_privacy_check.py
+      - name: Test macOS app
+        run: swift test
+      - name: Build app and installers without local extended attributes
+        run: |
+          ./Scripts/package_app.sh
+          xattr -cr Build/CodexControl.app
+          codesign --verify --deep --strict Build/CodexControl.app
+          ./Scripts/build_installers.sh
+      - name: Check installed package metadata
+        run: |
+          pkgutil --expand-full ReleaseArtifacts/CodexControl-1.2.8-macos-arm64.pkg "$RUNNER_TEMP/expanded-package"
+          if grep -R -a -l 'com.apple.provenance' "$RUNNER_TEMP/expanded-package"; then
+            echo 'Unexpected provenance metadata in package'
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sanitized-macos-installers
+          path: |
+            ReleaseArtifacts/*.dmg
+            ReleaseArtifacts/*.pkg
+            ReleaseArtifacts/SHA256SUMS.txt
+          if-no-files-found: error

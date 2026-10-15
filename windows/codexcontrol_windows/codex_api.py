@@ -1,0 +1,817 @@
+from __future__ import annotations
+
+import base64
+import json
+import threading
+import time
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any
+
+import requests
+
+from .file_locations import AMBIENT_CODEX_HOME, MANAGED_HOMES_DIRECTORY
+from .models import AccountUsageSnapshot, CreditsBalanceSnapshot, StoredAccount, UsageWindowSnapshot, parse_datetime
+
+
+REFRESH_ENDPOINT = "https://auth.openai.com/oauth/token"
+USAGE_DEFAULT_BASE = "https://chatgpt.com/backend-api"
+REFRESH_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
+REQUEST_TIMEOUT_SECONDS = 30
+USAGE_RETRY_DELAYS_SECONDS = (0.7, 1.8)
+TRANSIENT_HTTP_STATUS_CODES = {408, 429, 500, 502, 503, 504}
+_SESSION_STATE = threading.local()
+_USAGE_URL_CACHE: dict[str, tuple[float | None, str]] = {}
+UNAUTHORIZED_MESSAGE = "The Codex usage API request returned unauthorized."
+
+
+class CodexApiError(RuntimeError):
+    """Friendly error surfaced to the UI."""
+
+    def __init__(self, message: str, *, transient: bool = False, preserve_snapshot: bool = False) -> None:
+        super().__init__(message)
+        self.transient = transient
+        self.preserve_snapshot = preserve_snapshot or transient
+
+
+@dataclass(slots=True)
+class AuthBackedIdentity:
+    email: str | None
+    auth_subject: str | None
+    plan: str | None
+    provider_account_id: str | None
+
+
+@dataclass(slots=True)
+class AuthCredentials:
+    access_token: str
+    refresh_token: str
+    id_token: str | None
+    account_id: str | None
+    last_refresh: datetime | None
+
+    @property
+    def needs_refresh(self) -> bool:
+        if self.last_refresh is None:
+            return True
+        return datetime.now(timezone.utc) - self.last_refresh > timedelta(days=8)
+
+
+@dataclass(slots=True)
+class CredentialRecoveryCandidate:
+    home_path: str
+    credentials: AuthCredentials
+    identity: AuthBackedIdentity
+    freshness: datetime
+
+
+def load_identity(codex_home_path: str) -> AuthBackedIdentity:
+    credentials = _load_credentials(codex_home_path)
+    return _identity_from_credentials(credentials)
+
+
+def _identity_from_credentials(credentials: AuthCredentials) -> AuthBackedIdentity:
+    payload = _parse_jwt(credentials.id_token) if credentials.id_token else None
+    auth = payload.get("https://api.openai.com/auth") if isinstance(payload, dict) else None
+    profile = payload.get("https://api.openai.com/profile") if isinstance(payload, dict) else None
+
+    auth = auth if isinstance(auth, dict) else {}
+    profile = profile if isinstance(profile, dict) else {}
+
+    email = _normalize_string(payload.get("email") if isinstance(payload, dict) else None) or _normalize_string(profile.get("email"))
+    auth_subject = _normalize_string(payload.get("sub") if isinstance(payload, dict) else None)
+    plan = _normalize_string(auth.get("chatgpt_plan_type")) or _normalize_string(
+        payload.get("chatgpt_plan_type") if isinstance(payload, dict) else None
+    )
+    provider_account_id = _normalize_string(credentials.account_id) or _normalize_string(
+        auth.get("chatgpt_account_id")
+    ) or _normalize_string(payload.get("chatgpt_account_id") if isinstance(payload, dict) else None)
+
+    return AuthBackedIdentity(
+        email=email,
+        auth_subject=auth_subject,
+        plan=plan,
+        provider_account_id=provider_account_id,
+    )
+
+
+def fetch_snapshot(
+    account: StoredAccount,
+    verify_live_data: bool = True,
+) -> AccountUsageSnapshot:
+    credentials = _load_credentials(account.codex_home_path)
+
+    if credentials.needs_refresh and credentials.refresh_token:
+        try:
+            credentials = _refresh(credentials)
+            _save_credentials(credentials, account.codex_home_path)
+        except CodexApiError:
+            recovered = _recover_snapshot(account, {credentials.refresh_token}, verify_live_data)
+            if recovered is not None:
+                return recovered
+            raise
+
+    try:
+        if verify_live_data:
+            return _fetch_verified_snapshot(
+                codex_home_path=account.codex_home_path,
+                credentials=credentials,
+                fallback_email=account.email_hint,
+            )
+        return _fetch_snapshot(
+            codex_home_path=account.codex_home_path,
+            credentials=credentials,
+            fallback_email=account.email_hint,
+        )
+    except CodexApiError as error:
+        if str(error) != UNAUTHORIZED_MESSAGE or not credentials.refresh_token:
+            raise
+
+    try:
+        credentials = _refresh(credentials)
+        _save_credentials(credentials, account.codex_home_path)
+    except CodexApiError:
+        recovered = _recover_snapshot(account, {credentials.refresh_token}, verify_live_data)
+        if recovered is not None:
+            return recovered
+        raise
+    if verify_live_data:
+        return _fetch_verified_snapshot(
+            codex_home_path=account.codex_home_path,
+            credentials=credentials,
+            fallback_email=account.email_hint,
+        )
+    return _fetch_snapshot(
+        codex_home_path=account.codex_home_path,
+        credentials=credentials,
+        fallback_email=account.email_hint,
+    )
+
+
+def _fetch_verified_snapshot(
+    codex_home_path: str,
+    credentials: AuthCredentials,
+    fallback_email: str | None,
+) -> AccountUsageSnapshot:
+    first = _fetch_snapshot(codex_home_path, credentials, fallback_email)
+    second = _fetch_snapshot(codex_home_path, credentials, fallback_email)
+
+    if _is_equivalent(first, second):
+        return second
+
+    third = _fetch_snapshot(codex_home_path, credentials, fallback_email)
+    if _is_equivalent(first, third) or _is_equivalent(second, third):
+        return third
+
+    raise CodexApiError("Live API responses were inconsistent. The data could not be verified.")
+
+
+def _fetch_snapshot(
+    codex_home_path: str,
+    credentials: AuthCredentials,
+    fallback_email: str | None,
+) -> AccountUsageSnapshot:
+    identity = _identity_from_credentials(credentials)
+
+    response = _fetch_usage(
+        access_token=credentials.access_token,
+        account_id=credentials.account_id,
+        codex_home_path=codex_home_path,
+    )
+    primary_window, secondary_window = _make_normalized_windows(response.get("rate_limit"))
+    credits = response.get("credits")
+
+    return AccountUsageSnapshot(
+        email=(identity.email if identity else None) or fallback_email,
+        provider_account_id=(identity.provider_account_id if identity else None) or credentials.account_id,
+        plan=_normalize_string(response.get("plan_type")) or (identity.plan if identity else None),
+        allowed=response.get("rate_limit", {}).get("allowed") if isinstance(response.get("rate_limit"), dict) else None,
+        limit_reached=response.get("rate_limit", {}).get("limit_reached") if isinstance(response.get("rate_limit"), dict) else None,
+        primary_window=primary_window,
+        secondary_window=secondary_window,
+        credits=_make_credits(credits) if isinstance(credits, dict) else None,
+        updated_at=datetime.now(timezone.utc),
+    )
+
+
+def _load_credentials(codex_home_path: str) -> AuthCredentials:
+    auth_path = Path(codex_home_path) / "auth.json"
+    if not auth_path.exists():
+        raise CodexApiError("No `auth.json` was found for this account.")
+
+    try:
+        payload = json.loads(auth_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        raise CodexApiError(f"Failed to read the auth file: {error}") from error
+
+    api_key = payload.get("OPENAI_API_KEY")
+    if isinstance(api_key, str) and api_key.strip():
+        return AuthCredentials(
+            access_token=api_key.strip(),
+            refresh_token="",
+            id_token=None,
+            account_id=None,
+            last_refresh=None,
+        )
+
+    tokens = payload.get("tokens")
+    if not isinstance(tokens, dict):
+        raise CodexApiError("The required token fields are missing from `auth.json`.")
+
+    access_token = _string_value(tokens, "access_token")
+    if not access_token:
+        raise CodexApiError("The required token fields are missing from `auth.json`.")
+
+    id_token = _string_value(tokens, "id_token")
+
+    return AuthCredentials(
+        access_token=access_token,
+        refresh_token=_string_value(tokens, "refresh_token") or "",
+        id_token=id_token,
+        account_id=_string_value(tokens, "account_id") or _account_id_from_id_token(id_token),
+        last_refresh=parse_datetime(payload.get("last_refresh")),
+    )
+
+
+def _save_credentials(credentials: AuthCredentials, codex_home_path: str) -> None:
+    auth_path = Path(codex_home_path) / "auth.json"
+    payload: dict[str, Any] = {}
+    if auth_path.exists():
+        try:
+            payload = json.loads(auth_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            payload = {}
+
+    tokens: dict[str, Any] = {
+        "access_token": credentials.access_token,
+        "refresh_token": credentials.refresh_token,
+    }
+    if credentials.id_token is not None:
+        tokens["id_token"] = credentials.id_token
+    if credentials.account_id is not None:
+        tokens["account_id"] = credentials.account_id
+
+    payload["tokens"] = tokens
+    payload["last_refresh"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    auth_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def _refresh(credentials: AuthCredentials) -> AuthCredentials:
+    body = {
+        "client_id": REFRESH_CLIENT_ID,
+        "grant_type": "refresh_token",
+        "refresh_token": credentials.refresh_token,
+        "scope": "openid profile email",
+    }
+    headers = {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-cache, no-store, max-age=0",
+        "Pragma": "no-cache",
+    }
+
+    try:
+        response = _session().post(
+            REFRESH_ENDPOINT,
+            json=body,
+            headers=headers,
+            timeout=REQUEST_TIMEOUT_SECONDS,
+        )
+    except requests.RequestException as error:
+        raise CodexApiError(f"Network error: {error}") from error
+
+    if response.status_code == 401:
+        code = _extract_error_code(response.text).lower() if response.text else ""
+        if code == "refresh_token_reused":
+            raise CodexApiError("The refresh token can no longer be reused. Sign in again for this account.")
+        if code == "refresh_token_invalidated":
+            raise CodexApiError("The refresh token was revoked. Sign in again for this account.")
+        raise CodexApiError("The refresh token has expired. Sign in again for this account.")
+
+    if response.status_code != 200:
+        raise CodexApiError("The Codex API response was not in the expected format.")
+
+    try:
+        payload = response.json()
+    except ValueError as error:
+        raise CodexApiError("The Codex API response was not in the expected format.") from error
+
+    if not isinstance(payload, dict):
+        raise CodexApiError("The Codex API response was not in the expected format.")
+
+    return AuthCredentials(
+        access_token=str(payload.get("access_token") or credentials.access_token),
+        refresh_token=str(payload.get("refresh_token") or credentials.refresh_token),
+        id_token=payload.get("id_token") or credentials.id_token,
+        account_id=credentials.account_id or _account_id_from_id_token(payload.get("id_token")),
+        last_refresh=datetime.now(timezone.utc),
+    )
+
+
+def _fetch_usage(access_token: str, account_id: str | None, codex_home_path: str) -> dict[str, Any]:
+    url = _resolve_usage_url(codex_home_path)
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "User-Agent": "codex-cli",
+        "Accept": "application/json",
+        "Cache-Control": "no-cache, no-store, max-age=0",
+        "Pragma": "no-cache",
+    }
+    if account_id:
+        headers["ChatGPT-Account-Id"] = account_id
+
+    response = _get_usage_with_retries(url, headers)
+
+    if 200 <= response.status_code <= 299:
+        try:
+            payload = response.json()
+        except ValueError as error:
+            raise CodexApiError("The Codex API response was not in the expected format.") from error
+        if isinstance(payload, dict):
+            return payload
+        raise CodexApiError("The Codex API response was not in the expected format.")
+
+    if response.status_code in (401, 403):
+        raise CodexApiError(UNAUTHORIZED_MESSAGE)
+
+    message = _readable_server_message(response.text)
+    if _is_transient_status(response.status_code):
+        if message:
+            raise CodexApiError(
+                f"Codex usage API is temporarily unavailable ({response.status_code}): {message} "
+                "Try again in a moment.",
+                transient=True,
+            )
+        raise CodexApiError(
+            f"Codex usage API is temporarily unavailable ({response.status_code}). Try again in a moment.",
+            transient=True,
+        )
+
+    if message:
+        raise CodexApiError(f"Codex API error {response.status_code}: {message}")
+    raise CodexApiError(f"Codex API error {response.status_code}.")
+
+
+def _get_usage_with_retries(url: str, headers: dict[str, str]) -> requests.Response:
+    last_error: requests.RequestException | None = None
+    for attempt in range(len(USAGE_RETRY_DELAYS_SECONDS) + 1):
+        try:
+            response = _session().get(url, headers=headers, timeout=REQUEST_TIMEOUT_SECONDS)
+        except requests.RequestException as error:
+            last_error = error
+            if attempt < len(USAGE_RETRY_DELAYS_SECONDS):
+                time.sleep(USAGE_RETRY_DELAYS_SECONDS[attempt])
+                continue
+            raise CodexApiError(
+                f"Codex usage API is temporarily unavailable: {_readable_request_error(error)} Try again in a moment.",
+                transient=True,
+            ) from error
+
+        if _is_transient_status(response.status_code) and attempt < len(USAGE_RETRY_DELAYS_SECONDS):
+            time.sleep(USAGE_RETRY_DELAYS_SECONDS[attempt])
+            continue
+        return response
+
+    raise CodexApiError(
+        f"Codex usage API is temporarily unavailable: {_readable_request_error(last_error)} Try again in a moment.",
+        transient=True,
+    )
+
+
+def _is_transient_status(status_code: int) -> bool:
+    return status_code in TRANSIENT_HTTP_STATUS_CODES
+
+
+def _readable_server_message(raw_message: str | None) -> str | None:
+    if not raw_message:
+        return None
+
+    message = raw_message.strip()
+    if not message:
+        return None
+
+    try:
+        payload = json.loads(message)
+    except ValueError:
+        payload = None
+
+    if isinstance(payload, dict):
+        error = payload.get("error")
+        if isinstance(error, dict):
+            message = str(error.get("message") or error.get("code") or error.get("type") or "").strip()
+        elif isinstance(error, str):
+            message = error.strip()
+        elif payload.get("message") is not None:
+            message = str(payload.get("message")).strip()
+        elif payload.get("code") is not None:
+            message = str(payload.get("code")).strip()
+
+    if _looks_like_upstream_eof(message):
+        return "the upstream connection closed before the response finished."
+
+    if len(message) > 220:
+        return f"{message[:220]}..."
+    return message or None
+
+
+def _readable_request_error(error: BaseException | None) -> str:
+    if error is not None and _looks_like_upstream_eof(str(error)):
+        return "the upstream connection closed before the response finished."
+    return "the request to ChatGPT did not complete."
+
+
+def _looks_like_upstream_eof(message: str) -> bool:
+    normalized = message.lower()
+    return (
+        "eof occurred in violation of protocol" in normalized
+        or "urlopen error eof" in normalized
+        or "_ssl.c:" in normalized
+    )
+
+
+def _resolve_usage_url(codex_home_path: str) -> str:
+    config_path = Path(codex_home_path) / "config.toml"
+    cache_key = str(config_path)
+    try:
+        modified_at = config_path.stat().st_mtime if config_path.exists() else None
+    except OSError:
+        modified_at = None
+
+    cached = _USAGE_URL_CACHE.get(cache_key)
+    if cached is not None and cached[0] == modified_at:
+        return cached[1]
+
+    configured_base: str | None = None
+    if config_path.exists():
+        configured_base = _parse_chatgpt_base_url(config_path.read_text(encoding="utf-8"))
+
+    base = (configured_base or USAGE_DEFAULT_BASE).strip()
+    while base.endswith("/"):
+        base = base[:-1]
+
+    if base.startswith("https://chatgpt.com") and "/backend-api" not in base:
+        base += "/backend-api"
+    if base.startswith("https://chat.openai.com") and "/backend-api" not in base:
+        base += "/backend-api"
+
+    path = "/wham/usage" if "/backend-api" in base else "/api/codex/usage"
+    resolved = f"{base}{path}"
+    _USAGE_URL_CACHE[cache_key] = (modified_at, resolved)
+    return resolved
+
+
+def _session() -> requests.Session:
+    session = getattr(_SESSION_STATE, "session", None)
+    if session is None:
+        session = requests.Session()
+        _SESSION_STATE.session = session
+    return session
+
+
+def _parse_chatgpt_base_url(contents: str) -> str | None:
+    for raw_line in contents.splitlines():
+        line = raw_line.split("#", maxsplit=1)[0].strip()
+        if not line:
+            continue
+
+        parts = line.split("=", maxsplit=1)
+        if len(parts) != 2 or parts[0].strip() != "chatgpt_base_url":
+            continue
+
+        value = parts[1].strip()
+        if value.startswith('"') and value.endswith('"') and len(value) >= 2:
+            value = value[1:-1]
+        if value.startswith("'") and value.endswith("'") and len(value) >= 2:
+            value = value[1:-1]
+        return value
+
+    return None
+
+
+def _extract_error_code(payload: str) -> str:
+    try:
+        parsed = json.loads(payload)
+    except ValueError:
+        return ""
+
+    if not isinstance(parsed, dict):
+        return ""
+
+    error = parsed.get("error")
+    if isinstance(error, dict):
+        code = error.get("code")
+        return str(code) if code else ""
+    if isinstance(error, str):
+        return error
+    code = parsed.get("code")
+    return str(code) if code else ""
+
+
+def _make_window(payload: dict[str, Any]) -> UsageWindowSnapshot:
+    return UsageWindowSnapshot(
+        used_percent=float(payload["used_percent"]),
+        reset_at=datetime.fromtimestamp(float(payload["reset_at"]), tz=timezone.utc),
+        limit_window_seconds=int(payload["limit_window_seconds"]),
+    )
+
+
+def _make_credits(payload: dict[str, Any]) -> CreditsBalanceSnapshot:
+    balance = payload.get("balance")
+    return CreditsBalanceSnapshot(
+        has_credits=bool(payload.get("has_credits")),
+        unlimited=bool(payload.get("unlimited")),
+        balance=float(balance) if balance is not None else None,
+    )
+
+
+def _is_equivalent(left: AccountUsageSnapshot, right: AccountUsageSnapshot) -> bool:
+    return (
+        (_normalize_string(left.email) or "").lower() == (_normalize_string(right.email) or "").lower()
+        and _normalize_string(left.provider_account_id) == _normalize_string(right.provider_account_id)
+        and _normalize_string(left.plan) == _normalize_string(right.plan)
+        and left.allowed == right.allowed
+        and left.limit_reached == right.limit_reached
+        and _windows_equivalent(left.primary_window, right.primary_window)
+        and _windows_equivalent(left.secondary_window, right.secondary_window)
+        and _credits_equivalent(left.credits, right.credits)
+    )
+
+
+def _windows_equivalent(left: UsageWindowSnapshot | None, right: UsageWindowSnapshot | None) -> bool:
+    if left is None and right is None:
+        return True
+    if left is None or right is None:
+        return False
+
+    if left.reset_at is None and right.reset_at is None:
+        reset_matches = True
+    elif left.reset_at is not None and right.reset_at is not None:
+        reset_matches = abs((left.reset_at - right.reset_at).total_seconds()) <= 1
+    else:
+        reset_matches = False
+
+    return (
+        left.limit_window_seconds == right.limit_window_seconds
+        and reset_matches
+        and abs(left.used_percent - right.used_percent) < 0.001
+    )
+
+
+def _credits_equivalent(left: CreditsBalanceSnapshot | None, right: CreditsBalanceSnapshot | None) -> bool:
+    if left is None and right is None:
+        return True
+    if left is None or right is None:
+        return False
+
+    if left.balance is None and right.balance is None:
+        balances_match = True
+    elif left.balance is not None and right.balance is not None:
+        balances_match = abs(left.balance - right.balance) < 0.001
+    else:
+        balances_match = False
+
+    return (
+        left.has_credits == right.has_credits
+        and left.unlimited == right.unlimited
+        and balances_match
+    )
+
+
+def _make_normalized_windows(rate_limit: Any) -> tuple[UsageWindowSnapshot | None, UsageWindowSnapshot | None]:
+    if not isinstance(rate_limit, dict):
+        return None, None
+
+    primary = _make_window(rate_limit["primary_window"]) if isinstance(rate_limit.get("primary_window"), dict) else None
+    secondary = _make_window(rate_limit["secondary_window"]) if isinstance(rate_limit.get("secondary_window"), dict) else None
+
+    if rate_limit.get("limit_reached") is True:
+        if primary is not None:
+            primary = UsageWindowSnapshot(
+                used_percent=100.0,
+                reset_at=primary.reset_at,
+                limit_window_seconds=primary.limit_window_seconds,
+            )
+        if secondary is not None:
+            secondary = UsageWindowSnapshot(
+                used_percent=100.0,
+                reset_at=secondary.reset_at,
+                limit_window_seconds=secondary.limit_window_seconds,
+            )
+
+    return _normalize_window_roles(primary, secondary)
+
+
+def _normalize_window_roles(
+    primary: UsageWindowSnapshot | None,
+    secondary: UsageWindowSnapshot | None,
+) -> tuple[UsageWindowSnapshot | None, UsageWindowSnapshot | None]:
+    if primary is not None and secondary is not None:
+        primary_role = _role_for_window(primary)
+        secondary_role = _role_for_window(secondary)
+
+        if (primary_role, secondary_role) in {
+            ("session", "weekly"),
+            ("session", "unknown"),
+            ("unknown", "weekly"),
+        }:
+            return primary, secondary
+        if (primary_role, secondary_role) in {
+            ("weekly", "session"),
+            ("weekly", "unknown"),
+        }:
+            return secondary, primary
+        return primary, secondary
+
+    if primary is not None:
+        if _role_for_window(primary) == "weekly":
+            return None, primary
+        return primary, None
+
+    if secondary is not None:
+        if _role_for_window(secondary) == "weekly":
+            return None, secondary
+        return secondary, None
+
+    return None, None
+
+
+def _role_for_window(window: UsageWindowSnapshot) -> str:
+    if window.limit_window_seconds == 18_000:
+        return "session"
+    if window.limit_window_seconds == 604_800:
+        return "weekly"
+    return "unknown"
+
+
+def _recover_snapshot(
+    account: StoredAccount,
+    excluded_refresh_tokens: set[str],
+    verify_live_data: bool,
+) -> AccountUsageSnapshot | None:
+    for candidate in _recovery_candidates(account, excluded_refresh_tokens):
+        credentials = candidate.credentials
+
+        try:
+            if credentials.needs_refresh and credentials.refresh_token:
+                credentials = _refresh(credentials)
+                _save_credentials(credentials, candidate.home_path)
+
+            snapshot = _fetch_candidate_snapshot(
+                codex_home_path=candidate.home_path,
+                credentials=credentials,
+                fallback_email=account.email_hint,
+                verify_live_data=verify_live_data,
+            )
+            _save_credentials(credentials, account.codex_home_path)
+            return snapshot
+        except CodexApiError as error:
+            if str(error) != UNAUTHORIZED_MESSAGE or not credentials.refresh_token:
+                continue
+
+        try:
+            credentials = _refresh(credentials)
+            _save_credentials(credentials, candidate.home_path)
+            snapshot = _fetch_candidate_snapshot(
+                codex_home_path=candidate.home_path,
+                credentials=credentials,
+                fallback_email=account.email_hint,
+                verify_live_data=verify_live_data,
+            )
+            _save_credentials(credentials, account.codex_home_path)
+            return snapshot
+        except CodexApiError:
+            continue
+
+    return None
+
+
+def _fetch_candidate_snapshot(
+    codex_home_path: str,
+    credentials: AuthCredentials,
+    fallback_email: str | None,
+    verify_live_data: bool,
+) -> AccountUsageSnapshot:
+    if verify_live_data:
+        return _fetch_verified_snapshot(codex_home_path, credentials, fallback_email)
+    return _fetch_snapshot(codex_home_path, credentials, fallback_email)
+
+
+def _recovery_candidates(
+    account: StoredAccount,
+    excluded_refresh_tokens: set[str],
+) -> list[CredentialRecoveryCandidate]:
+    account_home_path = _standardized_path(Path(account.codex_home_path))
+    candidates: list[CredentialRecoveryCandidate] = []
+
+    for home_path in _recovery_home_paths():
+        standardized_home_path = _standardized_path(home_path)
+        if standardized_home_path == account_home_path:
+            continue
+
+        try:
+            credentials = _load_credentials(str(home_path))
+        except CodexApiError:
+            continue
+
+        if credentials.refresh_token in excluded_refresh_tokens:
+            continue
+
+        identity = _identity_from_credentials(credentials)
+        if not _identity_matches_account(identity, standardized_home_path, account):
+            continue
+
+        candidates.append(
+            CredentialRecoveryCandidate(
+                home_path=str(home_path),
+                credentials=credentials,
+                identity=identity,
+                freshness=_credentials_freshness(credentials, home_path),
+            )
+        )
+
+    return sorted(candidates, key=lambda candidate: candidate.freshness, reverse=True)
+
+
+def _recovery_home_paths() -> list[Path]:
+    homes: list[Path] = []
+    if MANAGED_HOMES_DIRECTORY.exists():
+        homes.extend(path for path in MANAGED_HOMES_DIRECTORY.iterdir() if path.is_dir())
+    homes.append(AMBIENT_CODEX_HOME)
+    return homes
+
+
+def _identity_matches_account(identity: AuthBackedIdentity, home_path: str, account: StoredAccount) -> bool:
+    if home_path == _standardized_path(Path(account.codex_home_path)):
+        return True
+
+    return account.matches_identity(identity.email, identity.auth_subject, identity.provider_account_id)
+
+
+def _credentials_freshness(credentials: AuthCredentials, home_path: Path) -> datetime:
+    if credentials.last_refresh is not None:
+        return credentials.last_refresh
+
+    auth_path = home_path / "auth.json"
+    try:
+        return datetime.fromtimestamp(auth_path.stat().st_mtime, tz=timezone.utc)
+    except OSError:
+        return datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _account_id_from_id_token(id_token: Any) -> str | None:
+    payload = _parse_jwt(id_token) if isinstance(id_token, str) else None
+    if not isinstance(payload, dict):
+        return None
+
+    auth = payload.get("https://api.openai.com/auth")
+    auth = auth if isinstance(auth, dict) else {}
+    return _normalize_string(auth.get("chatgpt_account_id")) or _normalize_string(payload.get("chatgpt_account_id"))
+
+
+def _standardized_path(path: Path) -> str:
+    return str(path.expanduser().resolve(strict=False)).casefold()
+
+
+def _normalize_identifier(value: str | None) -> str | None:
+    normalized = _normalize_string(value)
+    return normalized.lower() if normalized else None
+
+
+def _string_value(dictionary: dict[str, Any], key: str) -> str | None:
+    value = dictionary.get(key)
+    if isinstance(value, str) and value:
+        return value
+
+    pieces = key.split("_")
+    camel_key = pieces[0].lower() + "".join(piece[:1].upper() + piece[1:].lower() for piece in pieces[1:])
+    value = dictionary.get(camel_key)
+    if isinstance(value, str) and value:
+        return value
+    return None
+
+
+def _normalize_string(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _parse_jwt(token: str | None) -> dict[str, Any] | None:
+    if not token:
+        return None
+
+    parts = token.split(".")
+    if len(parts) < 2:
+        return None
+
+    payload = parts[1]
+    payload += "=" * (-len(payload) % 4)
+
+    try:
+        decoded = base64.urlsafe_b64decode(payload.encode("utf-8"))
+        parsed = json.loads(decoded)
+    except (ValueError, json.JSONDecodeError):
+        return None
+
+    return parsed if isinstance(parsed, dict) else None

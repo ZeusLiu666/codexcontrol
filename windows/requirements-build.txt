@@ -1,0 +1,16 @@
+# Release toolchain pins. Use Python 3.12 (64-bit) and Inno Setup 6.5.3.
+altgraph==0.17.5
+certifi==2026.7.22
+charset-normalizer==3.5.2
+idna==3.20
+packaging==26.3
+pefile==2024.8.26
+pillow==12.3.0
+pyinstaller==6.22.3
+pyinstaller-hooks-contrib==2026.8
+pystray==0.19.5
+pywin32-ctypes==0.2.3
+requests==2.34.2
+setuptools==84.0.0
+six==1.17.0
+urllib3==2.8.0
