@@ -30,3 +30,34 @@ applications, and to alter and redistribute it, provided that the following cond
 Jordan Russell
 jr-2020 AT jrsoftware.org
 https://jrsoftware.org/
+
+================================================================================
+Chinese reference translation (non-authoritative)
+The complete original English text above is preserved and controls. This translation is provided for reference only and does not replace or modify the license terms.
+
+中文参考译文（非官方）
+上方完整英文原文保留并作为许可条款依据。以下译文仅供理解，不替代、不修改任何许可条款；如有差异，以英文原文为准。
+
+Inno Setup 许可证
+=================
+
+除另有说明外，Inno Setup 软件包所含全部文档与软件的版权均归 Jordan Russell 所有。
+
+版权所有 (C) 1997–2025 Jordan Russell。保留所有权利。
+部分内容版权所有 (C) 2000–2025 Martijn Laan。保留所有权利。
+
+本软件按“原样”提供，不附带任何明示或默示的保证。在任何情况下，作者均不对使用本软件所产生的任何损害承担责任。
+
+允许任何人为任何目的使用本软件，包括商业应用，并允许修改和重新分发本软件，但须符合下列条件：
+
+1. 所有源代码文件的重新分发均须保留现有的全部版权声明及本条件清单，不得修改。
+
+2. 所有二进制形式的重新分发均须保留现有的上述版权声明及网站地址的全部出现位置（例如“关于”对话框中）。
+
+3. 不得歪曲本软件的来源；不得声称自己编写了原始软件。如果使用本软件分发某一产品，欢迎在产品文档中致谢，但不作要求。
+
+4. 修改后的源代码或二进制版本必须明确标明已经修改，不得将其冒充为原始软件。
+
+Jordan Russell
+jr-2020 AT jrsoftware.org
+https://jrsoftware.org/

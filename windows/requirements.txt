@@ -1,3 +1,5 @@
+# Runtime dependencies for source execution; release builds use requirements-build.txt.
+# 源码运行所需依赖；发布构建使用 requirements-build.txt。
 Pillow>=12.0.0
 pystray>=0.19.5
 requests>=2.32.0

@@ -44,6 +44,9 @@ corresponding checksum files before choosing an archive.
 
 CREDITS
 
+This independent derivative is based on and improved from the initial version
+of CodexControl by Adem Isler.
+
 Original author: Adem Isler
 https://github.com/ademisler/codexcontrol
 Copyright (c) 2026 Adem Isler
@@ -97,6 +100,8 @@ GitHub 自动 Source code 归档对应标签指向的提交；旧标签可能早
 两平台源码合并。选择归档时请核对 Release 说明及对应校验文件。
 
 署名
+
+本独立衍生版本基于原作者 Adem Isler 的 CodexControl 初版改进而来。
 
 原作者：Adem Isler
 https://github.com/ademisler/codexcontrol

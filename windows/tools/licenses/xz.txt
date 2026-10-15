@@ -75,3 +75,54 @@ XZ Utils Licensing
     If you have questions, don't hesitate to ask the author(s) for more
     information.
 
+
+
+================================================================================
+Chinese reference translation (non-authoritative)
+The complete original English text above is preserved and controls. This translation is provided for reference only and does not replace or modify the license terms.
+
+中文参考译文（非官方）
+上方完整英文原文保留并作为许可条款依据。以下译文仅供理解，不替代、不修改任何许可条款；如有差异，以英文原文为准。
+
+XZ Utils 许可说明
+================
+
+本软件包中的不同文件适用不同许可证。下列内容概述各部分通常适用的许可证（但请检查各个文件以确认）：
+
+- liblzma 属于公有领域。
+
+- xz、xzdec 和 lzmadec 命令行工具属于公有领域，除非必须从 lib 目录编译并链接 GNU getopt_long。getopt_long 代码适用 GNU LGPLv2.1 或更新版本。
+
+- 用于对压缩文件进行 grep 搜索、diff 比较和查看的脚本由 gzip 改编而来。这些脚本及其文档适用 GNU GPLv2 或更新版本。
+
+- doc 目录中的全部文档，以及其他目录中大多数专门针对 XZ Utils 的文档文件，属于公有领域。
+
+  说明：Doxygen 生成的 liblzma API HTML 文档版本已移除 JavaScript 文件（这些文件适用 MIT 许可证）。Doxygen 本身适用 GNU GPL，但其生成的其余文件不受 Doxygen 所用许可证影响，因为 Doxygen 的许可包含以下例外：
+
+  “Doxygen 生成的文档是由生成文档时所用的输入内容衍生的作品；它们不受本许可证影响。”
+
+- 翻译后的消息属于公有领域。
+
+- 构建系统包含公有领域文件，以及适用 GNU GPLv2 或更新版本、或 GNU GPLv3 或更新版本的文件。这些文件均不会进入构建生成的二进制文件。
+
+- tests 目录中的测试文件与测试代码，以及 debug 目录中的调试工具，属于公有领域。
+
+- extra 目录可能包含公有领域文件，以及适用各种自由软件许可证的文件。
+
+对于已置于公有领域的文件，您可以任意处理。如果您认为公有领域在法律上存在问题，请将上一句话视为一项许可授予。如果您仍认为没有版权在法律上存在问题，那您的律师就太多了。
+
+与通常情况一样，本软件按“原样”提供，不附带任何保证。
+
+如果您将大量 XZ Utils 公有领域代码复制到自己的项目中，在软件某处致谢是礼貌之举（尤其对于专有、非自由软件），但当然并无法律要求。以下是可放在“关于”对话框或文档中的一个合适声明示例：
+
+本软件包含来自 XZ Utils 的代码
+<https://xz.tukaani.org/xz-utils/>。
+
+下列文件包含相应的许可证文本：
+- COPYING.LGPLv2.1：GNU 宽通用公共许可证第 2.1 版
+- COPYING.GPLv2：GNU 通用公共许可证第 2 版
+- COPYING.GPLv3：GNU 通用公共许可证第 3 版
+
+请注意，工具链（编译器、链接器等）可能会添加受版权保护的代码片段。因此，例如，尽管 liblzma 二进制文件不含来自 XZ Utils 源代码包的受版权保护代码，它仍可能并非全部属于公有领域。
+
+如果有疑问，请随时向作者咨询更多信息。

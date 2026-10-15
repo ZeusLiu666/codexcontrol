@@ -19,3 +19,20 @@ IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
 CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
+================================================================================
+Chinese reference translation (non-authoritative)
+The complete original English text above is preserved and controls. This translation is provided for reference only and does not replace or modify the license terms.
+
+中文参考译文（非官方）
+上方完整英文原文保留并作为许可条款依据。以下译文仅供理解，不替代、不修改任何许可条款；如有差异，以英文原文为准。
+
+版权所有 (c) 1998–2000 Thai Open Source Software Center Ltd 和 Clark Cooper
+版权所有 (c) 2001–2022 Expat 维护者
+
+兹免费授予任何获得本软件及相关文档文件（下称“软件”）副本的人不受限制地处理本软件的权利，包括但不限于使用、复制、修改、合并、发布、分发、再许可及／或销售本软件副本的权利，并允许获得本软件的人如此行事，但须符合下列条件：
+
+上述版权声明及本许可声明必须包含在本软件的所有副本或实质性部分中。
+
+本软件按“原样”提供，不附带任何明示或默示的保证，包括但不限于关于适销性、特定用途适用性和不侵权的保证。无论因合同、侵权或其他行为引起，作者或版权持有人均不对因本软件、使用本软件或本软件中的其他交易而产生、由其导致或与之相关的任何索赔、损害或其他责任承担责任。

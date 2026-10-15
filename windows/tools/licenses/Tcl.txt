@@ -38,3 +38,21 @@ Government shall have only "Restricted Rights" as defined in Clause
 authors grant the U.S. Government and others acting in its behalf
 permission to use and distribute the software in accordance with the
 terms specified in this license.
+
+
+================================================================================
+Chinese reference translation (non-authoritative)
+The complete original English text above is preserved and controls. This translation is provided for reference only and does not replace or modify the license terms.
+
+中文参考译文（非官方）
+上方完整英文原文保留并作为许可条款依据。以下译文仅供理解，不替代、不修改任何许可条款；如有差异，以英文原文为准。
+
+本软件的版权归加利福尼亚大学校董会、Sun Microsystems, Inc.、Scriptics Corporation、ActiveState Corporation 及其他相关方所有。除非个别文件明确声明不适用，下列条款适用于与本软件相关的全部文件。
+
+作者特此允许为任何目的使用、复制、修改、分发和许可本软件及其文档，前提是所有副本保留现有版权声明，且任何分发均逐字包含本声明。任何已授权的使用均不需要书面协议、许可证或版税费用。本软件的修改可以由修改者享有版权，且无须遵循此处所述许可条款，前提是在适用这些新条款的每个文件的第一页明确标示新条款。
+
+在任何情况下，作者或分发者均不对任何一方因使用本软件、其文档或其任何衍生作品而产生的直接、间接、特殊、附带或后果性损害承担责任，即使作者已被告知可能发生此类损害亦然。
+
+作者和分发者明确否认任何保证，包括但不限于关于适销性、特定用途适用性和不侵权的默示保证。本软件按“原样”提供，作者和分发者没有提供维护、支持、更新、增强或修改的义务。
+
+政府使用：如果您代表美国政府取得本软件，政府对本软件及相关文档仅享有《联邦采购条例》（FAR）第 52.227.19 (c) (2) 条所定义的“受限权利”。如果您代表美国国防部取得本软件，本软件应归类为“商业计算机软件”，政府仅享有《国防联邦采购条例补充规定》（DFARs）第 252.227-7014 (b) (3) 条所定义的“受限权利”。尽管有上述规定，作者仍允许美国政府及代表美国政府行事的其他人按照本许可证规定的条款使用和分发本软件。

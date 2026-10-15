@@ -10,6 +10,8 @@ Maintained by CodexControl contributors.
 Distributed under the MIT License; see LICENSE for the full terms.
 
 This release is maintained by CodexControl contributors independently of the original author.
+This independent derivative is based on and improved from the initial version
+of CodexControl by Adem Isler.
 The original project name, icon, and upstream identifiers are retained for
 attribution and compatibility.
 
@@ -31,8 +33,9 @@ Copyright (c) 2026 Adem Isler
 
 遵循 MIT 许可证；完整条款见 LICENSE。
 
-本次发布由 CodexControl contributors 独立维护。为保留归属与兼容性，继续使用原项目名称、
-图标和上游标识符。
+本次发布由 CodexControl contributors 独立于原作者维护。本独立衍生版本基于
+原作者 Adem Isler 的 CodexControl 初版改进而来。
+为保留归属与兼容性，继续使用原项目名称、图标和上游标识符。
 
 更新涵盖每日 token 详情、菜单栏与状态显示，以及可选远程用量配置。
 保留账户切换、用量统计和小组件；下载内容不包含个人账户、登录凭据、

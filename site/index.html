@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CodexControl · macOS 与 Windows</title>
-  <meta name="description" content="在 macOS 和 Windows 上查看 Codex 额度、管理本地账号并切换当前登录。">
+  <title>CodexControl · macOS &amp; Windows · English / 中文</title>
+  <meta name="description" content="Codex quota tracking and local account switching for macOS and Windows. 查看 Codex 额度、管理本地账号并切换当前登录。">
   <meta name="theme-color" content="#10151b">
   <link rel="icon" href="./favicon.svg" type="image/svg+xml">
   <link rel="manifest" href="./site.webmanifest">
@@ -12,31 +12,55 @@
 </head>
 <body>
   <header class="page header">
-    <a class="brand" href="#"><img src="./assets/codexcontrol-mark.svg" alt="" width="36" height="36">CodexControl</a>
-    <nav aria-label="主导航"><a href="#platforms">下载</a><a href="#privacy">隐私</a><a href="https://github.com/ZeusLiu666/codexcontrol">GitHub</a></nav>
+    <a class="brand" href="#english"><img src="./assets/codexcontrol-mark.svg" alt="" width="36" height="36">CodexControl</a>
+    <nav aria-label="Language and project / 语言与项目"><a href="#english" lang="en">English</a><a href="#chinese" lang="zh-CN">中文</a><a href="https://github.com/ZeusLiu666/codexcontrol">GitHub</a></nav>
   </header>
   <main class="page">
-    <section class="hero" aria-labelledby="title">
-      <p class="eyebrow">macOS + Windows</p>
-      <h1 id="title">清楚查看额度，<br>方便切换账号。</h1>
-      <p class="lede">CodexControl 帮你查看 Codex 实时额度和重置时间，管理多个本地账号，并跟踪新增的 Token 用量。两个系统版本，共用一个项目。</p>
-      <p class="english" lang="en">Local-first Codex quota tracking and account switching.</p>
-      <div class="actions"><a class="button" href="https://github.com/ZeusLiu666/codexcontrol/releases">查看发布与下载</a><a class="text-link" href="https://github.com/ZeusLiu666/codexcontrol#readme">阅读使用说明 ↗</a></div>
-    </section>
-    <section id="platforms" aria-labelledby="platforms-title">
-      <h2 id="platforms-title">按系统选择版本</h2>
-      <div class="cards">
-        <article class="card"><p class="eyebrow">WINDOWS</p><h3>托盘与账号窗口</h3><p>Windows 10 x64 1809 及以上、Windows 11 x64。安装程序与便携包均无需另装 Python。</p><ul><li>当前用户安装，可选登录后自动启动</li><li>便携包解压运行</li><li>切换账号时保存与恢复 Desktop 会话状态</li></ul><a href="https://github.com/ZeusLiu666/codexcontrol/releases">下载 Setup / ZIP ↗</a></article>
-        <article class="card"><p class="eyebrow">macOS</p><h3>菜单栏与桌面组件</h3><p>macOS 14 及以上。现有发布提供 Apple Silicon arm64 版本，具体签名与兼容信息见 Release。</p><ul><li>SwiftUI / AppKit 原生实现</li><li>账号额度与本地 Token 统计</li><li>macOS 桌面 Widget</li></ul><a href="https://github.com/ZeusLiu666/codexcontrol/releases">下载 DMG / PKG ↗</a></article>
+    <section id="english" lang="en" aria-labelledby="title-en">
+      <div class="hero">
+        <p class="eyebrow">macOS + Windows · English</p>
+        <h1 id="title-en">See your quota.<br>Switch accounts easily.</h1>
+        <p class="lede">CodexControl shows live Codex quotas and reset times, manages multiple local accounts, and tracks new Token usage. Two operating systems, one project.</p>
+        <p><strong>Based on and improved from the original CodexControl by <a href="https://github.com/ademisler/codexcontrol">Adem Isler</a>.</strong> This edition is maintained independently of the original author and retains the original MIT copyright notices.</p>
+        <div class="actions"><a class="button" href="#platforms-en">Choose your download</a><a class="text-link" href="https://github.com/ZeusLiu666/codexcontrol#readme">Read the user guide ↗</a><a class="text-link" href="#chinese" lang="zh-CN">中文版 ↓</a></div>
       </div>
-      <p class="note">两个版本使用本机已有的 Codex CLI 完成登录。切换账号可能重启 Codex Desktop，请先保存工作。测试范围与校验值以各 Release 说明为准。</p>
+      <section id="platforms-en" aria-labelledby="platforms-title-en">
+        <h2 id="platforms-title-en">Choose your operating system</h2>
+        <div class="cards">
+          <article class="card"><p class="eyebrow">WINDOWS</p><h3>System tray and account window</h3><p>Windows 10 x64 1809 or later, or Windows 11 x64. The installer and portable package need no separate Python installation.</p><ul><li>Current-user installation with optional start at sign-in</li><li>Extract and run the portable package</li><li>Save and restore Desktop session state when switching accounts</li></ul><a href="https://github.com/ZeusLiu666/codexcontrol/releases">Download Setup / ZIP ↗</a></article>
+          <article class="card"><p class="eyebrow">macOS</p><h3>Menu bar and desktop widgets</h3><p>macOS 14 or later. Current releases provide an Apple Silicon arm64 build. See the release notes for signing and compatibility details.</p><ul><li>Native SwiftUI / AppKit implementation</li><li>Account quotas and local Token statistics</li><li>macOS desktop Widget</li></ul><a href="https://github.com/ZeusLiu666/codexcontrol/releases">Download DMG / PKG ↗</a></article>
+        </div>
+        <p class="note">Both versions use the Codex CLI installed on your computer to sign in. Switching accounts may restart Codex Desktop, so save your work first. Each release's notes document its test scope and checksums.</p>
+      </section>
+      <section class="features" aria-labelledby="features-title-en">
+        <h2 id="features-title-en">Quotas, accounts, and usage in one place</h2>
+        <div class="feature-grid"><article><h3>Live quota tracking</h3><p>Read quotas from OpenAI and show separate 5-hour and 7-day windows with reset times when the API provides them.</p></article><article><h3>Local account management</h3><p>Add, sign in again, refresh, and switch accounts, and see the current sign-in state.</p></article><article><h3>Incremental Token statistics</h3><p>Establish a local log baseline on first run, then count new events and show usage over the last 7 days.</p></article></div>
+      </section>
+      <section id="privacy-en" class="privacy" aria-labelledby="privacy-title-en"><p class="eyebrow">Privacy</p><h2 id="privacy-title-en">Accounts stay local. Protect sensitive files.</h2><p>Release packages contain no preconfigured accounts, authentication files, private SSH configurations, or runtime logs. Remote SSH statistics are disabled by default and require the user's own configuration.</p><p>Quota queries and credential refreshes communicate with OpenAI. Local accounts, tokens, backups, and session caches are not guaranteed to have additional encryption. Do not upload application data directories or screenshots containing sensitive information.</p><a href="https://github.com/ZeusLiu666/codexcontrol/blob/main/docs/PRIVACY.md">Read the full privacy guide ↗</a></section>
     </section>
-    <section class="features" aria-labelledby="features-title">
-      <h2 id="features-title">额度、账号和用量，一起查看</h2>
-      <div class="feature-grid"><article><h3>实时额度</h3><p>从 OpenAI 读取额度；接口提供时分别展示 5 小时与 7 天窗口及重置时间。</p></article><article><h3>本地账号管理</h3><p>添加、重新登录、刷新和切换账号，查看当前登录状态。</p></article><article><h3>增量 Token 统计</h3><p>首次运行建立本地日志基线，随后统计新增事件，展示近 7 天用量。</p></article></div>
+    <section id="chinese" lang="zh-CN" aria-labelledby="title-zh">
+      <div class="hero">
+        <p class="eyebrow">macOS + Windows · 中文</p>
+        <h1 id="title-zh">清楚查看额度，<br>方便切换账号。</h1>
+        <p class="lede">CodexControl 帮你查看 Codex 实时额度和重置时间，管理多个本地账号，并跟踪新增的 Token 用量。两个系统版本，共用一个项目。</p>
+        <p><strong>基于原作者 <a href="https://github.com/ademisler/codexcontrol">Adem Isler 的 CodexControl 初版</a>改进而来。</strong> 当前版本由维护者独立维护，并保留原作者的 MIT 版权声明。</p>
+        <div class="actions"><a class="button" href="#platforms-zh">按系统选择下载</a><a class="text-link" href="https://github.com/ZeusLiu666/codexcontrol#readme">阅读使用说明 ↗</a><a class="text-link" href="#english" lang="en">English ↑</a></div>
+      </div>
+      <section id="platforms-zh" aria-labelledby="platforms-title-zh">
+        <h2 id="platforms-title-zh">按系统选择版本</h2>
+        <div class="cards">
+          <article class="card"><p class="eyebrow">WINDOWS</p><h3>托盘与账号窗口</h3><p>Windows 10 x64 1809 及以上、Windows 11 x64。安装程序与便携包均无需另装 Python。</p><ul><li>当前用户安装，可选登录后自动启动</li><li>便携包解压运行</li><li>切换账号时保存与恢复 Desktop 会话状态</li></ul><a href="https://github.com/ZeusLiu666/codexcontrol/releases">下载 Setup / ZIP ↗</a></article>
+          <article class="card"><p class="eyebrow">macOS</p><h3>菜单栏与桌面组件</h3><p>macOS 14 及以上。现有发布提供 Apple Silicon arm64 版本，具体签名与兼容信息见 Release。</p><ul><li>SwiftUI / AppKit 原生实现</li><li>账号额度与本地 Token 统计</li><li>macOS 桌面 Widget</li></ul><a href="https://github.com/ZeusLiu666/codexcontrol/releases">下载 DMG / PKG ↗</a></article>
+        </div>
+        <p class="note">两个版本使用本机已有的 Codex CLI 完成登录。切换账号可能重启 Codex Desktop，请先保存工作。测试范围与校验值以各 Release 说明为准。</p>
+      </section>
+      <section class="features" aria-labelledby="features-title-zh">
+        <h2 id="features-title-zh">额度、账号和用量，一起查看</h2>
+        <div class="feature-grid"><article><h3>实时额度</h3><p>从 OpenAI 读取额度；接口提供时分别展示 5 小时与 7 天窗口及重置时间。</p></article><article><h3>本地账号管理</h3><p>添加、重新登录、刷新和切换账号，查看当前登录状态。</p></article><article><h3>增量 Token 统计</h3><p>首次运行建立本地日志基线，随后统计新增事件，展示近 7 天用量。</p></article></div>
+      </section>
+      <section id="privacy-zh" class="privacy" aria-labelledby="privacy-title-zh"><p class="eyebrow">隐私边界</p><h2 id="privacy-title-zh">账号留在本机，敏感文件需要保护。</h2><p>发布包不包含预置账号、认证文件、私人 SSH 配置或运行日志。远程 SSH 统计默认关闭，由使用者主动配置。</p><p>程序查询额度和刷新凭据时需要与 OpenAI 通信。本地账号、令牌、备份和会话缓存不保证额外加密，请勿上传应用数据目录或未经脱敏的截图。</p><a href="https://github.com/ZeusLiu666/codexcontrol/blob/main/docs/PRIVACY.md">查看完整隐私说明 ↗</a></section>
     </section>
-    <section id="privacy" class="privacy" aria-labelledby="privacy-title"><p class="eyebrow">隐私边界</p><h2 id="privacy-title">账号留在本机，敏感文件需要保护。</h2><p>发布包不包含预置账号、认证文件、私人 SSH 配置或运行日志。远程 SSH 统计默认关闭，由使用者主动配置。</p><p>程序查询额度和刷新凭据时需要与 OpenAI 通信。本地账号、令牌、备份和会话缓存不保证额外加密，请勿上传应用数据目录或未经脱敏的截图。</p><a href="https://github.com/ZeusLiu666/codexcontrol/blob/main/docs/PRIVACY.md">查看完整隐私说明 ↗</a></section>
   </main>
-  <footer class="page"><span>CodexControl · 独立开源工具，与 OpenAI 无隶属关系。</span><div><a href="https://github.com/ZeusLiu666/codexcontrol/blob/main/LICENSE">MIT 许可证</a><a href="https://github.com/ZeusLiu666/codexcontrol/blob/main/NOTICE">版权归属</a></div></footer>
+  <footer class="page"><span><span lang="en">CodexControl · Independent open-source tool; not affiliated with OpenAI.</span><br><span lang="zh-CN">CodexControl · 独立开源工具，与 OpenAI 无隶属关系。</span></span><div><a href="https://github.com/ZeusLiu666/codexcontrol/blob/main/LICENSE">MIT License / MIT 许可证</a><a href="https://github.com/ZeusLiu666/codexcontrol/blob/main/NOTICE">Attribution / 版权归属</a></div></footer>
 </body>
 </html>

@@ -1,2 +1,4 @@
+# Public project pages may be indexed by all crawlers.
+# 允许所有爬虫索引公开项目页面。
 User-agent: *
 Allow: /
