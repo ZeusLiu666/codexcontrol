@@ -15,7 +15,8 @@ if [[ -n "$CODE_SIGN_IDENTITY" && -n "$NOTARY_KEYCHAIN_PROFILE" ]]; then
   "$ROOT_DIR/Scripts/notarize_macos.sh" "$APP_PATH"
 fi
 
-ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ZIP_PATH"
-shasum -a 256 "$ZIP_PATH" > "$ZIP_PATH.sha256"
+xattr -cr "$APP_PATH"
+ditto -c -k --noextattr --norsrc --keepParent "$APP_PATH" "$ZIP_PATH"
+(cd "$ARTIFACT_DIR" && shasum -a 256 "$(basename "$ZIP_PATH")" > "$(basename "$ZIP_PATH").sha256")
 
 printf '%s\n%s\n' "$ZIP_PATH" "$ZIP_PATH.sha256"

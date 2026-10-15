@@ -4,14 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project uses Semantic Versioning.
 
-## [Unreleased]
+## [1.2.8] - 2026-10-15
 
-### Cross-platform release preparation
+### Cross-platform release
 
 - Unified the macOS and Windows project introduction, download guidance, and privacy documentation.
 - Added a per-user Windows x64 installer, portable package, and SHA-256 checksums.
 - Disabled remote Token collection until the user explicitly configures their own SSH targets.
 - Removed private infrastructure descriptions and unverified screenshots from the public source tree.
+- Rebuilt macOS installers without build-machine provenance metadata; disabled extended attributes in future macOS archives.
 
 ### Added
 
