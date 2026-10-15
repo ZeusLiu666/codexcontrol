@@ -44,7 +44,9 @@ jobs:
         run: choco install innosetup --version=6.5.3 --no-progress -y
       - name: Build Windows installer and portable archive
         shell: pwsh
-        run: ./windows/package_release.ps1 -Clean -Version ($env:GITHUB_REF_NAME -replace '^v', '')
+        run: |
+          $version = $env:GITHUB_REF_NAME -replace '^v(\d+\.\d+\.\d+).*$', '$1'
+          ./windows/package_release.ps1 -Clean -Version $version
       - uses: actions/upload-artifact@v4
         with:
           name: windows-release
@@ -71,4 +73,4 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "CodexControl ${TAG#v} · macOS + Windows" --generate-notes
-          gh release upload "$TAG" release-assets/*
+          gh release upload "$TAG" release-assets/* --clobber
