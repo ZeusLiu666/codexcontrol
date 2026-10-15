@@ -28,7 +28,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: python -m pip install -r windows/requirements.txt
+      - run: python -m pip install -r windows/requirements-build.txt
       - run: python -m unittest discover -s windows/tests -v
         env:
           PYTHONPATH: windows

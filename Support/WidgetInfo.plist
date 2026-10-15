@@ -32,6 +32,6 @@
 		<string>com.apple.widgetkit-extension</string>
 	</dict>
 	<key>NSHumanReadableCopyright</key>
-	<string>Copyright © 2026 Adem Isler. Updated by ZeusLiu.</string>
+	<string>Copyright © 2026 Adem Isler. Additional changes by CodexControl contributors; see LICENSE.</string>
 </dict>
 </plist>

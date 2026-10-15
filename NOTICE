@@ -1,16 +1,15 @@
-CodexControl — Updated by ZeusLiu
+CodexControl — macOS and Windows
 
 Original author: Adem Isler
 Original project: https://github.com/ademisler/codexcontrol
 Original website: https://codexcontrol.app
 Copyright (c) 2026 Adem Isler
 
-Updated by ZeusLiu
-Copyright (c) 2026 ZeusLiu
+Maintained by CodexControl contributors.
 
 Distributed under the MIT License; see LICENSE for the full terms.
 
-This release is maintained by ZeusLiu independently of the original author.
+This release is maintained by CodexControl contributors independently of the original author.
 The original project name, icon, and upstream identifiers are retained for
 attribution and compatibility.
 
@@ -21,19 +20,18 @@ history, or SSH configuration is included in the downloads.
 
 ---
 
-CodexControl — 由 ZeusLiu 更新
+CodexControl — macOS 与 Windows
 
 原作者：Adem Isler
 原项目：https://github.com/ademisler/codexcontrol
 原网站：https://codexcontrol.app
 Copyright (c) 2026 Adem Isler
 
-由 ZeusLiu 更新
-Copyright (c) 2026 ZeusLiu
+由 CodexControl contributors 维护。
 
 遵循 MIT 许可证；完整条款见 LICENSE。
 
-本次发布由 ZeusLiu 独立维护。为保留归属与兼容性，继续使用原项目名称、
+本次发布由 CodexControl contributors 独立维护。为保留归属与兼容性，继续使用原项目名称、
 图标和上游标识符。
 
 更新涵盖每日 token 详情、菜单栏与状态显示，以及可选远程用量配置。

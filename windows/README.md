@@ -61,7 +61,7 @@ powershell -ExecutionPolicy Bypass -File .\windows\package_release.ps1 `
 - `CodexControl-<版本>-windows-x64-portable.zip`
 - `SHA256SUMS-windows.txt`
 
-便携包中的 `install.ps1` 可将程序复制到当前用户程序目录。该辅助脚本与图形安装程序的默认选项不同，调用前请阅读参数：
+便携包中的 `install.ps1` 可将程序复制到当前用户程序目录。调用前请阅读参数；下面示例保持登录后自动启动关闭：
 
 ```powershell
 # 在解压目录中执行；显式关闭脚本的登录后自动启动选项
@@ -71,9 +71,10 @@ powershell -ExecutionPolicy Bypass -File .\windows\package_release.ps1 `
 
 ## 测试
 
-在仓库根目录、已安装运行依赖的隔离环境中执行：
+在仓库根目录的隔离环境中执行。测试还会验证发布工具，需要安装构建依赖：
 
 ```powershell
+.\.venv\Scripts\python.exe -m pip install -r .\windows\requirements-build.txt
 $env:PYTHONPATH = (Resolve-Path .\windows).Path
 .\.venv\Scripts\python.exe -m unittest discover -s .\windows\tests -v
 ```

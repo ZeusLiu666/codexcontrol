@@ -1,5 +1,5 @@
 CodexControl 1.2.8 (build 17)
-Updated by ZeusLiu
+Maintained by CodexControl contributors
 
 INSTALL
 
@@ -16,8 +16,8 @@ macOS may show a verification warning.
 
 ABOUT THIS BUILD
 
-Build 17 updates the bundled wording and release metadata.
-App features are unchanged from build 16.
+This macOS build is part of the unified CodexControl project for macOS and Windows.
+It retains account switching, quota tracking, Token analytics, and widgets.
 
 LOCAL DATA
 
@@ -31,9 +31,16 @@ See the repository README for the format and SSH setup.
 
 SOURCE
 
-Download CodexControl-1.2.8-source-sanitized.zip from the Release assets.
-GitHub's automatic Source code downloads contain repository documentation
-only. Download checksums are in SHA256SUMS.txt.
+The complete macOS and Windows source is public in the same repository:
+https://github.com/ZeusLiu666/codexcontrol
+
+git clone https://github.com/ZeusLiu666/codexcontrol.git
+
+For the current source, use the main branch. The Release also includes the
+combined source attachment CodexControl-1.2.8-source-sanitized.zip.
+Automatic Source code archives reflect the commit attached to their tag;
+older tags may predate the unified source. Check the Release notes and
+corresponding checksum files before choosing an archive.
 
 CREDITS
 
@@ -41,15 +48,14 @@ Original author: Adem Isler
 https://github.com/ademisler/codexcontrol
 Copyright (c) 2026 Adem Isler
 
-Updated by ZeusLiu
-Copyright (c) 2026 ZeusLiu
+Additional changes by CodexControl contributors; see LICENSE.txt.
 
 MIT License; see LICENSE.txt and NOTICE.txt.
 
 ---
 
 CodexControl 1.2.8（构建 17）
-由 ZeusLiu 更新
+由 CodexControl contributors 维护
 
 安装
 
@@ -65,7 +71,8 @@ macOS 可能显示验证提示。
 
 本次构建
 
-构建 17 更新随包文案与发布元数据，应用功能与构建 16 相同。
+本 macOS 构建属于 macOS 与 Windows 共用的 CodexControl 项目。
+保留账号切换、额度查询、Token 统计与桌面小组件。
 
 本机数据
 
@@ -79,9 +86,15 @@ macOS 可能显示验证提示。
 
 源码
 
-应用源码请下载 Release 附件 CodexControl-1.2.8-source-sanitized.zip。
-GitHub 自动生成的 Source code 下载仅含仓库文档。
-下载文件的校验值见 SHA256SUMS.txt。
+完整的 macOS 与 Windows 源码在同一个公开仓库中：
+https://github.com/ZeusLiu666/codexcontrol
+
+git clone https://github.com/ZeusLiu666/codexcontrol.git
+
+当前源码请使用 main 分支。Release 另提供两平台合并源码附件
+CodexControl-1.2.8-source-sanitized.zip。
+GitHub 自动 Source code 归档对应标签指向的提交；旧标签可能早于
+两平台源码合并。选择归档时请核对 Release 说明及对应校验文件。
 
 署名
 
@@ -89,7 +102,6 @@ GitHub 自动生成的 Source code 下载仅含仓库文档。
 https://github.com/ademisler/codexcontrol
 Copyright (c) 2026 Adem Isler
 
-由 ZeusLiu 更新
-Copyright (c) 2026 ZeusLiu
+其他修改由 CodexControl contributors 维护；完整归属见 LICENSE.txt。
 
 遵循 MIT 许可证；详见 LICENSE.txt 和 NOTICE.txt。
