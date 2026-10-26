@@ -23,7 +23,7 @@ python -m venv .venv
 $env:PYTHONPATH = (Resolve-Path .\windows).Path
 .\.venv\Scripts\python.exe -m unittest discover -s .\windows\tests -v
 powershell -ExecutionPolicy Bypass -File .\windows\package_release.ps1 `
-  -Python .\.venv\Scripts\python.exe -Version 1.2.8 -Clean
+  -Python .\.venv\Scripts\python.exe -Version 1.2.9 -Clean
 ```
 
 Replace the example version with the release version. Pass `-InnoSetupCompiler <path-to-ISCC.exe>` when needed. Outputs are written to `ReleaseArtifacts`:
@@ -58,6 +58,8 @@ With `CODE_SIGN_IDENTITY` and `NOTARY_KEYCHAIN_PROFILE`, the script can sign, no
 Put Windows installers, the Windows portable archive, macOS assets, and their checksums in the same version's Release in this repository. Document supported systems and architectures, upgrade/data-retention behavior, and each platform's validation scope.
 
 `.github/workflows/release.yml` is the tag-triggered release entry point. Before enabling it, confirm that it targets the current repository, builds the correct filenames, and obtains signing/publication credentials from appropriately scoped Secrets. Do not reuse another maintainer's repository target or private deployment credentials. Alternatively, prepare a draft Release with reviewed local builds, verify it, and publish it.
+
+For a Windows-only update, `.github/workflows/windows-release.yml` runs when the Windows `__version__` changes on `main`, or by manual dispatch from `main`. Add reviewed bilingual notes at `docs/releases/v<version>-windows.md`. It tests and builds that exact commit, verifies the three Windows attachments, creates a draft `v<version>-zeusliu.1` Release, and publishes it as a prerelease only after uploaded checksums match. It refuses to overwrite an already published version. This path leaves existing macOS downloads in their original Release.
 
 Deploying the website is not required to publish installers. Deploy only when you own the destination and have configured permission to deploy there. Do not describe the upstream domain as belonging to this repository.
 
@@ -98,7 +100,7 @@ python -m venv .venv
 $env:PYTHONPATH = (Resolve-Path .\windows).Path
 .\.venv\Scripts\python.exe -m unittest discover -s .\windows\tests -v
 powershell -ExecutionPolicy Bypass -File .\windows\package_release.ps1 `
-  -Python .\.venv\Scripts\python.exe -Version 1.2.8 -Clean
+  -Python .\.venv\Scripts\python.exe -Version 1.2.9 -Clean
 ```
 
 示例版本应替换为当前发布版本。必要时传入 `-InnoSetupCompiler <ISCC.exe路径>`。产物位于 `ReleaseArtifacts`：
@@ -133,6 +135,8 @@ swift test
 将 Windows 安装包、Windows 便携包、macOS 附件和各自校验文件放在本仓库同一版本 Release 下。描述中应说明支持的系统版本、架构、升级与数据保留行为，以及每个平台的测试范围。
 
 `.github/workflows/release.yml` 是标签触发的发布入口。启用之前确认它使用当前仓库上下文、构建正确的文件名，并且所有签名与发布凭据均来自适当权限的 Secrets；不要沿用他人的仓库目标或个人部署凭据。也可以先创建草稿 Release，上传经审查的本地构建附件，核对后发布。
+
+仅更新 Windows 时，修改 `main` 上的 Windows `__version__` 会触发 `.github/workflows/windows-release.yml`，也可以从 `main` 手动启动。请先在 `docs/releases/v<版本>-windows.md` 中准备中英文说明。流程测试并构建该次提交，校验三个 Windows 附件，创建 `v<版本>-zeusliu.1` 草稿 Release，上传后的哈希一致才发布为预发布版；已公开的版本不会被覆盖。此流程保留原 Release 中的 macOS 下载。
 
 网站源码和网站部署不属于安装包发布的必要步骤。只有拥有目标站点及明确配置的部署权限时才部署；不要在项目介绍中把上游域名描述为本仓库拥有。
 

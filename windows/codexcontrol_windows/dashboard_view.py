@@ -101,7 +101,6 @@ class DashboardView:
         self.brand_icon_image = ImageTk.PhotoImage(self._create_icon_image('neutral', 34))
         tk.Label(header, image=self.brand_icon_image, bg=p['shell'], bd=0).pack(side='left', padx=(0, 11))
         titles = tk.Frame(header, bg=p['shell'])
-        titles.pack(side='left', fill='x', expand=True)
         self.title_label = self._label(titles, 'CodexControl', 'title')
         self.title_label.pack(anchor='w')
         self.subtitle_label = self._label(titles, 'Your accounts, at a glance', 'caption', p['muted'])
@@ -109,9 +108,19 @@ class DashboardView:
         controls = tk.Frame(header, bg=p['shell'])
         controls.pack(side='right')
         self.add_button = self._icon_button(controls, 'plus', self.start_or_cancel_add_account, 'Add account', accent=True, size=36)
-        self.add_button.pack(side='left', padx=(0, 5))
-        self.refresh_button = self._icon_button(controls, 'refresh', self.refresh_all, 'Refresh all accounts', size=36)
+        self.add_button.pack(side='left', padx=(0, 8))
+        self.refresh_button = ActionButton(
+            controls, text='Refresh', icon='refresh', command=self.refresh_all,
+            background=p['shell'], fill=p['panel_alt'], hover_fill=p['hover'],
+            foreground=p['text'], border='#59626f',
+            disabled_fill=p['panel'], disabled_foreground=p['muted'],
+            focus_color=p['accent'], font=self.fonts['button'],
+            height=36, icon_size=20, padding=10, gap=6, radius=10,
+            tooltip='Refresh all accounts · Ctrl+R',
+        )
         self.refresh_button.pack(side='left')
+        # Reserve the action buttons before allocating the flexible title area.
+        titles.pack(side='left', fill='x', expand=True, padx=(0, 10))
 
         # Compact overview replaces the three large, heavily outlined boxes.
         self.metrics_frame = tk.Frame(self.shell, bg=p['shell'])

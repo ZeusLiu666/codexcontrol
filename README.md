@@ -26,11 +26,11 @@ Choose the attachment for your platform from this repository's [Releases](https:
 | Windows 10 x64 version 1809 or later / Windows 11 x64 | `CodexControl-<version>-windows-x64-portable.zip` | Extract and run `CodexControl.exe`; no separate Python installation is needed |
 | macOS 14 or later, Apple Silicon | macOS arm64 `.dmg` / `.pkg` | Open the disk image or installer and follow the included instructions |
 
-The current [v1.2.8-zeusliu.1 release](https://github.com/ZeusLiu666/codexcontrol/releases/tag/v1.2.8-zeusliu.1) has unsigned Windows executables. Its macOS app is ad-hoc signed and has not been notarized by Apple. Windows or macOS may display a verification warning; check the release notes and checksums before running a download.
+The [Windows 1.2.9 release](https://github.com/ZeusLiu666/codexcontrol/releases/tag/v1.2.9-zeusliu.1) includes the updated application icon, a labeled Refresh button, and automatic discovery of Codex Desktop's bundled command. Windows executables are unsigned. macOS downloads remain in the [1.2.8 release](https://github.com/ZeusLiu666/codexcontrol/releases/tag/v1.2.8-zeusliu.1); that app is ad-hoc signed and has not been notarized by Apple. Check the platform-specific release notes and checksums before running a download.
 
 The Windows installer and portable archive run the same application. The portable app still stores accounts and runtime data in the current user's `%APPDATA%\CodexControl`, outside the extracted archive. Uninstalling the installed version preserves that user data. SHA-256 checksums are provided for Windows release attachments.
 
-Adding accounts and signing in again require a working local Codex CLI installation. Quota queries and sign-in need a network connection. Account switching may close and restart Codex Desktop; save your work first.
+Adding accounts and signing in again require an available Codex command. Windows 1.2.9 can use the command bundled with an installed Codex Desktop, including Microsoft Store/MSIX installations, without installing a separate CLI or changing PATH. Existing standalone CLI installations remain supported. Quota queries and sign-in need a network connection. Account switching may close and restart Codex Desktop; save your work first.
 
 ### Features
 
@@ -170,11 +170,11 @@ CodexControl 的两个系统版本在同一个仓库中维护，共用项目介�
 | Windows 10 x64 1809 及以上 / Windows 11 x64 | `CodexControl-<版本>-windows-x64-portable.zip` | 解压后运行 `CodexControl.exe`，无需另装 Python |
 | macOS 14 及以上，Apple Silicon | 现有 macOS arm64 `.dmg` / `.pkg` | 打开磁盘映像或安装程序，按附件说明安装 |
 
-当前 [v1.2.8-zeusliu.1 Release](https://github.com/ZeusLiu666/codexcontrol/releases/tag/v1.2.8-zeusliu.1) 的 Windows 可执行程序未进行代码签名；macOS 应用使用本地临时签名（ad-hoc），尚未经过 Apple 公证。Windows 或 macOS 可能显示验证提示；运行下载文件前请核对发布说明和校验值。
+本次 [Windows 1.2.9 更新](https://github.com/ZeusLiu666/codexcontrol/releases/tag/v1.2.9-zeusliu.1) 包含新应用图标、带文字的刷新按钮，以及 Codex Desktop 内置命令的自动识别。Windows 可执行程序未进行代码签名。macOS 下载仍位于 [1.2.8 Release](https://github.com/ZeusLiu666/codexcontrol/releases/tag/v1.2.8-zeusliu.1)，该应用使用本地临时签名（ad-hoc），尚未经过 Apple 公证。运行下载文件前请核对相应平台的发布说明和校验值。
 
 Windows 安装包和便携包运行的是同一程序。便携包仍将账号和运行数据保存在当前用户的 `%APPDATA%\CodexControl` 中，不会把账号保存在解压目录内。安装程序卸载时保留这些用户数据。Windows 发布附件提供 SHA-256 校验值。
 
-使用添加账号、重新登录等功能需要本机可用的 Codex CLI。额度查询和登录需要网络连接。账号切换可能关闭并重新启动 Codex Desktop，请先保存工作。
+添加账号、重新登录等功能需要本机可用的 Codex 命令。Windows 1.2.9 可自动使用已安装 Codex Desktop 的内置命令，支持 Microsoft Store/MSIX 安装，无需另装 CLI 或修改 PATH；原有独立 CLI 安装仍受支持。额度查询和登录需要网络连接。账号切换可能关闭并重新启动 Codex Desktop，请先保存工作。
 
 ### 功能
 

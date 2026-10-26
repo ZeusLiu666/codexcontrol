@@ -14,7 +14,7 @@ CodexControl provides local account switching, live quota tracking, and Token st
 
 - Windows 10 x64 1809 (build 17763) or later, or Windows 11 x64.
 - The installer and portable package do not require a separate Python installation.
-- Adding accounts and signing in again require an available Codex CLI. Quota retrieval and sign-in require network access.
+- Adding accounts and signing in again can use the command already bundled with Codex Desktop, including Microsoft Store/MSIX installations. A separate CLI installation or PATH change is not required when Desktop is installed; standalone CLI installations remain supported. Quota retrieval and sign-in require network access.
 - Optional SSH statistics require a local OpenSSH client, non-interactive authentication configured by the user, and `python3` on the remote host.
 
 ### Installation and use
@@ -56,7 +56,7 @@ The official Inno Setup 6.5.3 compiler is required. The script checks its hash. 
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\windows\package_release.ps1 `
-  -Python .\.venv\Scripts\python.exe -Version 1.2.8 -InstallDependencies -Clean
+  -Python .\.venv\Scripts\python.exe -Version 1.2.9 -InstallDependencies -Clean
 ```
 
 If the script cannot find the compiler automatically, pass `-InnoSetupCompiler <path-to-ISCC.exe>`. It also accepts `-Python <path-to-python.exe>`. Outputs are written to `ReleaseArtifacts`:
@@ -101,7 +101,7 @@ CodexControl 提供本地账号切换、实时额度查看和 Token 统计。
 
 - Windows 10 x64 1809（系统内部版本 17763）或以上，或 Windows 11 x64。
 - 安装包和便携包无需用户另装 Python。
-- 添加账号、重新登录需要可用的 Codex CLI；额度读取和登录需要网络。
+- 添加账号、重新登录可直接使用 Codex Desktop 内置的命令，支持 Microsoft Store/MSIX 安装。已安装桌面版时无需另装 CLI 或修改 PATH；原有独立 CLI 安装仍受支持。额度读取和登录需要网络。
 - 可选 SSH 统计需要本机 OpenSSH 客户端、用户自行配置的非交互式认证，以及远端 `python3`。
 
 ### 安装与使用
@@ -143,7 +143,7 @@ powershell -ExecutionPolicy Bypass -File .\windows\build.ps1 `
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\windows\package_release.ps1 `
-  -Python .\.venv\Scripts\python.exe -Version 1.2.8 -InstallDependencies -Clean
+  -Python .\.venv\Scripts\python.exe -Version 1.2.9 -InstallDependencies -Clean
 ```
 
 如构建脚本无法自动找到编译器，传入 `-InnoSetupCompiler <ISCC.exe路径>`；也支持 `-Python <python.exe路径>`。输出位于 `ReleaseArtifacts`：

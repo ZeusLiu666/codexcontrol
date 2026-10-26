@@ -8,6 +8,16 @@ All notable changes to this project will be documented in this file. Earlier ver
 
 The format is based on Keep a Changelog and this project uses Semantic Versioning.
 
+### [1.2.9] - 2026-10-26
+
+#### Windows
+
+- Automatically discover and validate the command bundled with Codex Desktop, including versioned local directories and Microsoft Store/MSIX packages, so adding accounts no longer requires a separate CLI installation when Desktop is available.
+- Rediscover paths for every sign-in and reject graphical executables, invalid versions, and timed-out probes.
+- Replace the small refresh glyph with a connected circular arrow and a labeled, high-contrast Refresh button; keep it visible in narrow windows and at larger text scales.
+- Refresh the application, desktop, taskbar, and tray icon with a simpler mint control mark that remains readable at small sizes.
+- Add a Windows-only release workflow that builds installers and portable packages from source and publishes checksums after validation. macOS downloads remain at 1.2.8.
+
 ### [1.2.8] - 2026-10-15
 
 #### Cross-platform release
@@ -143,6 +153,16 @@ The format is based on Keep a Changelog and this project uses Semantic Versionin
 本文件记录项目的所有重要变更。较早版本的条目描述当时的行为，不一定代表当前版本。
 
 格式参考 Keep a Changelog，项目采用语义化版本控制（Semantic Versioning）。
+
+### [1.2.9] - 2026-10-26
+
+#### Windows
+
+- 自动识别并校验 Codex Desktop 内置命令，支持本机版本目录与 Microsoft Store/MSIX 安装；已安装桌面版时，添加账号无需另装 CLI。
+- 每次登录重新发现路径，并排除桌面图形程序、无效版本与超时的探测结果。
+- 将不易辨认的刷新图形改为连接完整的圆形箭头，标题区使用带文字、高对比度的 Refresh 按钮，并兼容窄窗口和较大文字缩放。
+- 更新应用、桌面、任务栏和托盘图标，使用在小尺寸下更清楚的薄荷绿控制标志。
+- 新增 Windows 独立发布流程，从源码构建安装包与便携包，通过验证后发布校验值。macOS 下载仍为 1.2.8。
 
 ### [1.2.8] - 2026-10-15
 

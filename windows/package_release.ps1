@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$Python = 'python.exe',
-    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$Version = '1.2.8',
+    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$Version = '1.2.9',
     [string]$InnoSetupCompiler = '',
     [string]$OutputDirectory = '',
     [switch]$InstallDependencies,

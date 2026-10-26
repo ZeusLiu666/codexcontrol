@@ -1,0 +1,286 @@
+name: Publish Windows update
+
+on:
+  push:
+    branches: ["main"]
+    paths: ["windows/codexcontrol_windows/__init__.py"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codexcontrol-windows-release
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    if: github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      tag: ${{ steps.release.outputs.tag }}
+      commit: ${{ steps.release.outputs.commit }}
+      artifact: ${{ steps.release.outputs.artifact }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          architecture: x64
+      - name: Read and validate the Windows release version
+        id: release
+        shell: python
+        run: |
+          import ast
+          import os
+          from pathlib import Path
+          import re
+          import subprocess
+          import sys
+          tree = ast.parse(Path("windows/codexcontrol_windows/__init__.py").read_text(encoding="utf-8"))
+          values = [ast.literal_eval(node.value) for node in tree.body
+                    if isinstance(node, ast.Assign)
+                    and any(isinstance(target, ast.Name) and target.id == "__version__" for target in node.targets)]
+          if len(values) != 1 or not isinstance(values[0], str) or not re.fullmatch(r"\d+\.\d+\.\d+", values[0]):
+              raise SystemExit("Windows __version__ must be one numeric x.y.z string")
+          version = values[0]
+          commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+          if commit != os.environ["GITHUB_SHA"]:
+              raise SystemExit("Checkout does not match the triggering commit")
+          if sys.version_info[:2] != (3, 12) or sys.maxsize <= 2**32:
+              raise SystemExit("Build requires Python 3.12 x64")
+          notes = Path(f"docs/releases/v{version}-windows.md")
+          if not notes.is_file() or not notes.read_text(encoding="utf-8").strip():
+              raise SystemExit("Reviewed Windows release notes are missing")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"version={version}\ntag=v{version}-zeusliu.1\ncommit={commit}\nartifact=windows-release-{version}-{commit}\n")
+      - name: Install the pinned release toolchain
+        run: python -m pip install --disable-pip-version-check -r windows/requirements-build.txt
+      - name: Check the source selected for publication
+        run: python tools/release_privacy_check.py
+      - name: Run the full Windows regression suite
+        shell: python
+        env:
+          PYTHONPATH: windows
+        run: |
+          import json
+          import os
+          from pathlib import Path
+          import unittest
+          suite = unittest.defaultTestLoader.discover("windows/tests")
+          if suite.countTestCases() < 180:
+              raise SystemExit("The release must run the full Windows suite (at least 180 tests)")
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          report = {"tests_run": result.testsRun, "failures": len(result.failures),
+                    "errors": len(result.errors), "skipped": len(result.skipped),
+                    "successful": result.wasSuccessful()}
+          Path(os.environ["RUNNER_TEMP"], "codexcontrol-tests.json").write_text(json.dumps(report), encoding="utf-8")
+          if not result.wasSuccessful():
+              raise SystemExit(1)
+      - name: Install the pinned official installer compiler
+        shell: pwsh
+        run: |
+          choco install innosetup --version=6.5.3 --allow-downgrade --no-progress -y
+          if ($LASTEXITCODE -notin @(0, 3010)) { throw "Inno Setup installation failed: $LASTEXITCODE" }
+          # package_release.ps1 independently checks the exact ISCC.exe SHA-256.
+      - name: Build the Windows executable, installer, and portable archive from source
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          $pythonExecutable = (Get-Command python.exe -CommandType Application -ErrorAction Stop).Source
+          ./windows/package_release.ps1 -Python $pythonExecutable -Clean -Version $env:RELEASE_VERSION
+      - name: Bind verified artifact hashes to the tested commit
+        shell: python
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import re
+          version, tag = os.environ["RELEASE_VERSION"], os.environ["RELEASE_TAG"]
+          root = Path("ReleaseArtifacts")
+          names = [f"CodexControl-{version}-windows-x64-Setup.exe",
+                   f"CodexControl-{version}-windows-x64-portable.zip", "SHA256SUMS-windows.txt"]
+          if {path.name for path in root.iterdir()} != set(names):
+              raise SystemExit("ReleaseArtifacts contains missing or unexpected files")
+          hashes = {name: hashlib.sha256((root / name).read_bytes()).hexdigest() for name in names}
+          lines = (root / names[-1]).read_text(encoding="utf-8").splitlines()
+          expected_lines = {f"{hashes[name]}  {name}" for name in names[:-1]}
+          if len(lines) != 2 or set(lines) != expected_lines:
+              raise SystemExit("Published Windows checksum file does not match the artifacts")
+          tests = json.loads(Path(os.environ["RUNNER_TEMP"], "codexcontrol-tests.json").read_text(encoding="utf-8"))
+          if not tests["successful"] or tests["tests_run"] < 180:
+              raise SystemExit("Successful full test evidence is missing")
+          manifest = {"version": version, "tag": tag, "commit": os.environ["GITHUB_SHA"],
+                      "assets": hashes, "tests": tests}
+          (root / "release-build.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.release.outputs.artifact }}
+          path: |
+            ReleaseArtifacts/CodexControl-${{ steps.release.outputs.version }}-windows-x64-Setup.exe
+            ReleaseArtifacts/CodexControl-${{ steps.release.outputs.version }}-windows-x64-portable.zip
+            ReleaseArtifacts/SHA256SUMS-windows.txt
+            ReleaseArtifacts/release-build.json
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    needs: windows
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.windows.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.windows.outputs.artifact }}
+          path: release-assets
+      - name: Verify, upload to a draft, then publish the Windows prerelease
+        shell: python
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          EXPECTED_COMMIT: ${{ needs.windows.outputs.commit }}
+          RELEASE_VERSION: ${{ needs.windows.outputs.version }}
+          RELEASE_TAG: ${{ needs.windows.outputs.tag }}
+        run: |
+          import ast
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import subprocess
+          import tempfile
+          from urllib.parse import quote
+
+          def gh(*args):
+              return subprocess.check_output(["gh", *args], text=True)
+
+          def api(path, *, optional=False, fields=None):
+              args = ["gh", "api", path]
+              if fields is not None:
+                  args += ["--method", "POST"]
+                  for key, value in fields.items():
+                      args += ["--raw-field", f"{key}={value}"]
+              result = subprocess.run(args, text=True, capture_output=True)
+              if result.returncode:
+                  if optional and "(HTTP 404)" in result.stderr:
+                      return None
+                  raise RuntimeError(result.stderr.strip() or "GitHub API request failed")
+              return json.loads(result.stdout)
+
+          repo, commit = os.environ["GH_REPO"], os.environ["EXPECTED_COMMIT"]
+          version, tag = os.environ["RELEASE_VERSION"], os.environ["RELEASE_TAG"]
+          if not re.fullmatch(r"\d+\.\d+\.\d+", version) or tag != f"v{version}-zeusliu.1" or not re.fullmatch(r"[0-9a-f]{40}", commit):
+              raise SystemExit("Invalid release metadata")
+          if subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip() != commit:
+              raise SystemExit("Publish checkout differs from the tested commit")
+          tree = ast.parse(Path("windows/codexcontrol_windows/__init__.py").read_text(encoding="utf-8"))
+          versions = [ast.literal_eval(node.value) for node in tree.body if isinstance(node, ast.Assign)
+                      and any(isinstance(target, ast.Name) and target.id == "__version__" for target in node.targets)]
+          if versions != [version]:
+              raise SystemExit("Publish version differs from the tested source")
+          notes = Path(f"docs/releases/v{version}-windows.md")
+          if not notes.is_file() or not notes.read_text(encoding="utf-8").strip():
+              raise SystemExit("Reviewed release notes are missing")
+          root = Path("release-assets")
+          names = {f"CodexControl-{version}-windows-x64-Setup.exe",
+                   f"CodexControl-{version}-windows-x64-portable.zip", "SHA256SUMS-windows.txt"}
+          if {path.name for path in root.iterdir()} != names | {"release-build.json"}:
+              raise SystemExit("Artifact download contains unexpected files")
+          hashes = {name: hashlib.sha256((root / name).read_bytes()).hexdigest() for name in names}
+          manifest = json.loads((root / "release-build.json").read_text(encoding="utf-8"))
+          if any(manifest.get(key) != value for key, value in {"version": version, "tag": tag, "commit": commit, "assets": hashes}.items()):
+              raise SystemExit("Artifact hashes or target commit differ from the tested build")
+          if not manifest["tests"]["successful"] or manifest["tests"]["tests_run"] < 180:
+              raise SystemExit("Full successful regression evidence is missing")
+          checksum_lines = (root / "SHA256SUMS-windows.txt").read_text(encoding="utf-8").splitlines()
+          if len(checksum_lines) != 2 or set(checksum_lines) != {f"{hashes[name]}  {name}" for name in names if name != "SHA256SUMS-windows.txt"}:
+              raise SystemExit("Windows checksum file failed verification")
+
+          release_path = f"repos/{repo}/releases/tags/{quote(tag, safe='')}"
+          release = api(release_path, optional=True)
+          if release is not None and not release["draft"]:
+              raise SystemExit("This tag already has a published release; refusing to replace it")
+          tag_path = f"repos/{repo}/git/ref/tags/{quote(tag, safe='')}"
+          tag_ref = api(tag_path, optional=True)
+          if tag_ref is not None:
+              target = tag_ref["object"]
+              for _ in range(5):
+                  if target["type"] != "tag":
+                      break
+                  target = api(f"repos/{repo}/git/tags/{target['sha']}")["object"]
+              if target["type"] != "commit" or target["sha"] != commit:
+                  raise SystemExit("The existing tag points at a different commit")
+          if release is not None:
+              target_commit = api(f"repos/{repo}/commits/{quote(release['target_commitish'], safe='')}")["sha"]
+              if release["tag_name"] != tag or target_commit != commit:
+                  raise SystemExit("The existing draft targets a different commit")
+              if any(asset["name"] not in names for asset in release["assets"]):
+                  raise SystemExit("The existing draft has unexpected assets; leaving them untouched")
+          if tag_ref is None:
+              # GITHUB_TOKEN-created tags do not recursively trigger release.yml.
+              api(f"repos/{repo}/git/refs", fields={"ref": f"refs/tags/{tag}", "sha": commit})
+          if release is None:
+              gh("release", "create", tag, "--draft", "--prerelease", "--verify-tag", "--target", commit,
+                 "--title", f"CodexControl {version} · Windows", "--notes-file", str(notes), "--latest=false")
+              release = api(release_path)
+
+          def verify_asset(asset):
+              name = asset["name"]
+              if asset["size"] != (root / name).stat().st_size:
+                  raise SystemExit(f"Draft asset size differs: {name}")
+              digest = asset.get("digest")
+              if digest:
+                  if digest != "sha256:" + hashes[name]:
+                      raise SystemExit(f"Draft asset digest differs: {name}")
+              else:
+                  with tempfile.TemporaryDirectory() as temporary:
+                      gh("release", "download", tag, "--pattern", name, "--dir", temporary)
+                      if hashlib.sha256(Path(temporary, name).read_bytes()).hexdigest() != hashes[name]:
+                          raise SystemExit(f"Draft asset bytes differ: {name}")
+
+          existing = {asset["name"]: asset for asset in release["assets"]}
+          if len(existing) != len(release["assets"]):
+              raise SystemExit("The draft has duplicate asset names")
+          if not release["draft"]:
+              raise SystemExit("The release is no longer a draft")
+          # Check every existing file before adding anything on a retry.
+          for asset in existing.values():
+              verify_asset(asset)
+          for name in sorted(names - existing.keys()):
+              # Never use --clobber: a retry must preserve existing files.
+              gh("release", "upload", tag, str(root / name))
+          release = api(release_path)
+          if not release["draft"] or {asset["name"] for asset in release["assets"]} != names:
+              raise SystemExit("Draft state or final asset set changed before publication")
+          for asset in release["assets"]:
+              verify_asset(asset)
+          current_tag = api(tag_path)["object"]
+          while current_tag["type"] == "tag":
+              current_tag = api(f"repos/{repo}/git/tags/{current_tag['sha']}")["object"]
+          if current_tag["type"] != "commit" or current_tag["sha"] != commit:
+              raise SystemExit("Release tag changed before publication")
+          gh("release", "edit", tag, "--draft=false", "--prerelease", "--latest=false", "--verify-tag",
+             "--target", commit, "--title", f"CodexControl {version} · Windows", "--notes-file", str(notes))
+          published = api(release_path)
+          if published["draft"] or not published["prerelease"]:
+              raise SystemExit("GitHub did not publish the expected prerelease")
+          print(published["html_url"])

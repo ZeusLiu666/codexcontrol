@@ -1644,7 +1644,7 @@ class CodexControlWindowsApp(DashboardView):
         return build_orbit_dial_icon(
             size,
             accent=accent,
-            core="#ff4a4a",
+            core="#ddfff2",
             panel_fill=self.palette["panel"],
             panel_fill_end=self.palette["bg"],
             dark=self.palette["dark_icon"],

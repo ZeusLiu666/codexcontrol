@@ -148,7 +148,14 @@ def draw_icon(name: str, size: int = 18, color: str = "#d6dee8", stroke_width: f
     if name in {"plus", "add"}:
         line([(12, 5), (12, 19)]); line([(5, 12), (19, 12)])
     elif name == "refresh":
-        arc(12, 12, 7.5, -62, 210); line([(4.5, 7), (4.5, 12), (9.5, 12)])
+        # A clockwise circular arrow with its head joined to the arc endpoint.
+        # Give this familiar action enough weight to read at small sizes.
+        pen = max(pen, round(2.1 * scale))
+        radius, end = 7.3, 330
+        arc(12, 12, radius, 40, end)
+        tip_x = 12 + math.cos(math.radians(end)) * radius
+        tip_y = 12 + math.sin(math.radians(end)) * radius
+        line([(tip_x - 4.8, tip_y), (tip_x, tip_y), (tip_x, tip_y - 4.8)])
     elif name == "switch":
         line([(4, 8), (20, 8)]); line([(16, 4), (20, 8), (16, 12)])
         line([(20, 16), (4, 16)]); line([(8, 12), (4, 16), (8, 20)])
