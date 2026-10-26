@@ -3,7 +3,9 @@ name: Publish Windows update
 on:
   push:
     branches: ["main"]
-    paths: ["windows/codexcontrol_windows/__init__.py"]
+    paths:
+      - "windows/codexcontrol_windows/__init__.py"
+      - ".github/workflows/windows-release.yml"
   workflow_dispatch:
 
 permissions:
@@ -85,18 +87,37 @@ jobs:
           if not result.wasSuccessful():
               raise SystemExit(1)
       - name: Install the pinned official installer compiler
+        id: compiler
         shell: pwsh
         run: |
-          choco install innosetup --version=6.5.3 --allow-downgrade --no-progress -y
-          if ($LASTEXITCODE -notin @(0, 3010)) { throw "Inno Setup installation failed: $LASTEXITCODE" }
-          # package_release.ps1 independently checks the exact ISCC.exe SHA-256.
+          $ErrorActionPreference = 'Stop'
+          $installerPath = Join-Path $env:RUNNER_TEMP 'innosetup-6.5.3.exe'
+          $compilerDirectory = Join-Path $env:RUNNER_TEMP 'inno-setup-6.5.3'
+          $installLog = Join-Path $env:RUNNER_TEMP 'inno-setup-6.5.3-install.log'
+          Invoke-WebRequest -Uri 'https://github.com/jrsoftware/issrc/releases/download/is-6_5_3/innosetup-6.5.3.exe' -OutFile $installerPath -TimeoutSec 120
+          $installerHash = (Get-FileHash -LiteralPath $installerPath -Algorithm SHA256).Hash
+          if ($installerHash -ne '9345EE029FAA0B7AED0818C3D5B227699EF9A496CCE79E20C19EB9D6EF2E2C2D') {
+            throw 'The official Inno Setup 6.5.3 installer checksum does not match.'
+          }
+          $arguments = @('/SP-', '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/NOICONS', ('/DIR="' + $compilerDirectory + '"'), ('/LOG="' + $installLog + '"'))
+          $setup = Start-Process -FilePath $installerPath -ArgumentList $arguments -WindowStyle Hidden -Wait -PassThru
+          if ($setup.ExitCode -ne 0) {
+            if (Test-Path -LiteralPath $installLog) { Get-Content -LiteralPath $installLog -Tail 25 }
+            throw "Inno Setup installation failed: $($setup.ExitCode)"
+          }
+          $compilerPath = Join-Path $compilerDirectory 'ISCC.exe'
+          if ((Get-FileHash -LiteralPath $compilerPath -Algorithm SHA256).Hash -ne 'BEE85A645A2C4E1BE05024815CF80DBF0B52343EAAD1F8330C85F63DF0D0FB1E') {
+            throw 'The isolated ISCC.exe does not match the pinned official compiler.'
+          }
+          "path=$compilerPath" >> $env:GITHUB_OUTPUT
       - name: Build the Windows executable, installer, and portable archive from source
         shell: pwsh
         env:
           RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          INNO_SETUP_COMPILER: ${{ steps.compiler.outputs.path }}
         run: |
           $pythonExecutable = (Get-Command python.exe -CommandType Application -ErrorAction Stop).Source
-          ./windows/package_release.ps1 -Python $pythonExecutable -Clean -Version $env:RELEASE_VERSION
+          ./windows/package_release.ps1 -Python $pythonExecutable -Clean -Version $env:RELEASE_VERSION -InnoSetupCompiler $env:INNO_SETUP_COMPILER
       - name: Bind verified artifact hashes to the tested commit
         shell: python
         env:
