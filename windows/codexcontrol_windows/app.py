@@ -33,7 +33,7 @@ from .presentation_logic import account_sort_key, is_active_account, AccountIden
 from .token_usage import TokenUsageTracker, RemoteTokenUsageMirror, compact, zero
 from .stores import AccountStore, SnapshotStore
 from .dashboard_view import DashboardView
-from .native_window import bring_window_to_front, apply_window_appearance
+from .native_window import bring_window_to_front, apply_window_appearance, set_app_identity
 from .file_locations import APP_SUPPORT_DIRECTORY
 from .file_locations import MANAGED_HOMES_DIRECTORY
 
@@ -1874,5 +1874,6 @@ class CodexControlWindowsApp(DashboardView):
 def main(argv: list[str] | None = None) -> None:
     arguments = list(sys.argv[1:] if argv is None else argv)
     start_hidden = any(argument.lower() in {"--hidden", "/hidden"} for argument in arguments)
+    set_app_identity()
     app = CodexControlWindowsApp(start_hidden=start_hidden)
     app.run()

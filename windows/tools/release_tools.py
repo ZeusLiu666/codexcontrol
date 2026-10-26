@@ -10,7 +10,7 @@ import sys
 import zipfile
 
 PORTABLE_FILES = (
-    "CodexControl.exe", "install.ps1", "README.md", "LICENSE",
+    "CodexControl.exe", "CodexControl.ico", "install.ps1", "README.md", "LICENSE",
     "THIRD_PARTY_NOTICES.txt",
 )
 RUNTIME_DISTRIBUTIONS = (

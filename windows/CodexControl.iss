@@ -19,8 +19,9 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0.17763
 OutputBaseFilename=CodexControl-{#AppVersion}-windows-x64-Setup
-SetupIconFile=build-assets\CodexControl.ico
-UninstallDisplayIcon={app}\CodexControl.exe
+; Inno Setup applies this icon to both Setup and the generated uninstaller.
+SetupIconFile={#PayloadDir}\CodexControl.ico
+UninstallDisplayIcon={app}\CodexControl-{#AppVersion}.ico
 LicenseFile={#PayloadDir}\LICENSE
 Compression=lzma2/ultra64
 SolidCompression=yes
@@ -40,14 +41,15 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; Flags: unchecked
 
 [Files]
 Source: "{#PayloadDir}\CodexControl.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#PayloadDir}\CodexControl.ico"; DestDir: "{app}"; DestName: "CodexControl-{#AppVersion}.ico"; Flags: ignoreversion
 Source: "{#PayloadDir}\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PayloadDir}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PayloadDir}\THIRD_PARTY_NOTICES.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\CodexControl"; Filename: "{app}\CodexControl.exe"; WorkingDir: "{app}"
-Name: "{userdesktop}\CodexControl"; Filename: "{app}\CodexControl.exe"; WorkingDir: "{app}"; Tasks: desktopicon
-Name: "{userstartup}\CodexControl"; Filename: "{app}\CodexControl.exe"; Parameters: "--hidden"; WorkingDir: "{app}"; Tasks: startup
+Name: "{group}\CodexControl"; Filename: "{app}\CodexControl.exe"; WorkingDir: "{app}"; IconFilename: "{app}\CodexControl-{#AppVersion}.ico"; AppUserModelID: "CodexControl.Windows"
+Name: "{userdesktop}\CodexControl"; Filename: "{app}\CodexControl.exe"; WorkingDir: "{app}"; IconFilename: "{app}\CodexControl-{#AppVersion}.ico"; AppUserModelID: "CodexControl.Windows"; Tasks: desktopicon
+Name: "{userstartup}\CodexControl"; Filename: "{app}\CodexControl.exe"; Parameters: "--hidden"; WorkingDir: "{app}"; IconFilename: "{app}\CodexControl-{#AppVersion}.ico"; AppUserModelID: "CodexControl.Windows"; Tasks: startup
 
 [Run]
 Filename: "{app}\CodexControl.exe"; Description: "Launch CodexControl"; Flags: nowait postinstall skipifsilent unchecked

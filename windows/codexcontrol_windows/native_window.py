@@ -27,6 +27,21 @@ RDW_INVALIDATE = 0x0001
 RDW_ERASE = 0x0004
 RDW_ALLCHILDREN = 0x0080
 RDW_UPDATENOW = 0x0100
+APP_USER_MODEL_ID = "CodexControl.Windows"
+
+
+def set_app_identity() -> bool:
+    """Use the installed shortcut identity instead of a launcher's taskbar icon."""
+    if os.name != "nt":
+        return False
+    try:
+        shell32 = ctypes.WinDLL("shell32", use_last_error=True)
+        set_identity = shell32.SetCurrentProcessExplicitAppUserModelID
+        set_identity.argtypes = [wintypes.LPCWSTR]
+        set_identity.restype = ctypes.c_long
+        return set_identity(APP_USER_MODEL_ID) == 0
+    except (OSError, AttributeError):
+        return False
 
 
 class _Win32Api:

@@ -16,6 +16,7 @@ The format is based on Keep a Changelog and this project uses Semantic Versionin
 - Rediscover paths for every sign-in and reject graphical executables, invalid versions, and timed-out probes.
 - Replace the small refresh glyph with a connected circular arrow and a labeled, high-contrast Refresh button; keep it visible in narrow windows and at larger text scales.
 - Refresh the application, desktop, taskbar, and tray icon with a simpler mint control mark that remains readable at small sizes.
+- Share a versioned icon file across installed shortcuts and the uninstall entry, and set an explicit taskbar identity to prevent old launcher icons from being reused.
 - Add a Windows-only release workflow that builds installers and portable packages from source and publishes checksums after validation. macOS downloads remain at 1.2.8.
 
 ### [1.2.8] - 2026-10-15
@@ -162,6 +163,7 @@ The format is based on Keep a Changelog and this project uses Semantic Versionin
 - 每次登录重新发现路径，并排除桌面图形程序、无效版本与超时的探测结果。
 - 将不易辨认的刷新图形改为连接完整的圆形箭头，标题区使用带文字、高对比度的 Refresh 按钮，并兼容窄窗口和较大文字缩放。
 - 更新应用、桌面、任务栏和托盘图标，使用在小尺寸下更清楚的薄荷绿控制标志。
+- 安装快捷方式与卸载入口统一引用带版本号的图标文件，并设置明确的任务栏标识，避免沿用旧启动器的图标。
 - 新增 Windows 独立发布流程，从源码构建安装包与便携包，通过验证后发布校验值。macOS 下载仍为 1.2.8。
 
 ### [1.2.8] - 2026-10-15

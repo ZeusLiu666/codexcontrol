@@ -43,6 +43,7 @@ New-Item -ItemType Directory -Path $packageRoot -Force | Out-Null
 # Only these named files may enter the release. Never copy a source tree/profile.
 $packageFiles = [ordered]@{
     'CodexControl.exe' = $exe
+    'CodexControl.ico' = (Join-Path $windowsRoot 'build-assets\CodexControl.ico')
     'install.ps1' = (Join-Path $windowsRoot 'install.ps1')
     'README.md' = (Join-Path $windowsRoot 'README.md')
     'LICENSE' = (Join-Path $repoRoot 'LICENSE')

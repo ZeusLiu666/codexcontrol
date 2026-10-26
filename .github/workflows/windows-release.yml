@@ -197,13 +197,12 @@ jobs:
           def gh(*args):
               return subprocess.check_output(["gh", *args], text=True)
 
-          def api(path, *, optional=False, fields=None):
+          def api(path, *, optional=False, fields=None, method="POST"):
               args = ["gh", "api", path]
               if fields is not None:
-                  args += ["--method", "POST"]
-                  for key, value in fields.items():
-                      args += ["--raw-field", f"{key}={value}"]
-              result = subprocess.run(args, text=True, capture_output=True)
+                  args += ["--method", method, "--input", "-"]
+              result = subprocess.run(args, text=True, capture_output=True,
+                                      input=json.dumps(fields) if fields is not None else None)
               if result.returncode:
                   if optional and "(HTTP 404)" in result.stderr:
                       return None
@@ -239,33 +238,83 @@ jobs:
           if len(checksum_lines) != 2 or set(checksum_lines) != {f"{hashes[name]}  {name}" for name in names if name != "SHA256SUMS-windows.txt"}:
               raise SystemExit("Windows checksum file failed verification")
 
-          release_path = f"repos/{repo}/releases/tags/{quote(tag, safe='')}"
-          release = api(release_path, optional=True)
-          if release is not None and not release["draft"]:
-              raise SystemExit("This tag already has a published release; refusing to replace it")
-          tag_path = f"repos/{repo}/git/ref/tags/{quote(tag, safe='')}"
-          tag_ref = api(tag_path, optional=True)
-          if tag_ref is not None:
+          def find_release():
+              # The public release-by-tag endpoint cannot discover drafts.
+              # Authenticated list responses include them; paginate explicitly.
+              matches = []
+              for page in range(1, 101):
+                  releases = api(f"repos/{repo}/releases?per_page=100&page={page}")
+                  matches.extend(item for item in releases if item["tag_name"] == tag)
+                  if len(releases) < 100:
+                      break
+              else:
+                  raise SystemExit("Release listing exceeded the safe pagination bound")
+              if len(matches) > 1:
+                  raise SystemExit("Multiple releases use this tag; leaving them untouched")
+              return matches[0] if matches else None
+
+          def tag_commit(tag_ref):
               target = tag_ref["object"]
               for _ in range(5):
                   if target["type"] != "tag":
                       break
                   target = api(f"repos/{repo}/git/tags/{target['sha']}")["object"]
-              if target["type"] != "commit" or target["sha"] != commit:
-                  raise SystemExit("The existing tag points at a different commit")
+              if target["type"] != "commit":
+                  raise SystemExit("The existing tag does not resolve to a commit")
+              return target["sha"]
+
+          release = find_release()
+          if release is not None and not release["draft"]:
+              raise SystemExit("This tag already has a published release; refusing to replace it")
+          tag_path = f"repos/{repo}/git/ref/tags/{quote(tag, safe='')}"
+          tag_ref = api(tag_path, optional=True)
+          existing_tag_commit = tag_commit(tag_ref) if tag_ref is not None else None
           if release is not None:
               target_commit = api(f"repos/{repo}/commits/{quote(release['target_commitish'], safe='')}")["sha"]
-              if release["tag_name"] != tag or target_commit != commit:
-                  raise SystemExit("The existing draft targets a different commit")
               if any(asset["name"] not in names for asset in release["assets"]):
                   raise SystemExit("The existing draft has unexpected assets; leaving them untouched")
+              if target_commit != commit or existing_tag_commit not in (None, commit):
+                  # A prior failed run can leave our own empty draft and tag.
+                  # Move only that untouched bot-owned draft to a tested descendant.
+                  old_commit = release["target_commitish"]
+                  if (release["assets"] or release.get("author", {}).get("login") != "github-actions[bot]"
+                          or not re.fullmatch(r"[0-9a-f]{40}", old_commit)
+                          or existing_tag_commit != old_commit
+                          or tag_ref is None or tag_ref["object"]["type"] != "commit"):
+                      raise SystemExit("The old draft is not an untouched bot-created empty draft")
+                  comparison = api(f"repos/{repo}/compare/{old_commit}...{commit}")
+                  if (comparison.get("status") != "ahead" or comparison.get("ahead_by", 0) <= 0
+                          or comparison.get("behind_by", 0) != 0):
+                      raise SystemExit("The new release commit is not a descendant of the empty draft")
+                  fresh = api(f"repos/{repo}/releases/{release['id']}")
+                  fresh_tag = api(tag_path)
+                  if (not fresh["draft"] or fresh["assets"]
+                          or fresh.get("author", {}).get("login") != "github-actions[bot]"
+                          or fresh["target_commitish"] != old_commit
+                          or fresh_tag["object"]["type"] != "commit"
+                          or fresh_tag["object"]["sha"] != old_commit):
+                      raise SystemExit("The empty draft or tag changed before migration")
+                  api(f"repos/{repo}/git/refs/tags/{quote(tag, safe='')}",
+                      fields={"sha": commit, "force": False}, method="PATCH")
+                  gh("release", "edit", tag, "--draft", "--target", commit,
+                     "--title", f"CodexControl {version} · Windows", "--notes-file", str(notes))
+                  release = api(f"repos/{repo}/releases/{release['id']}")
+                  if not release["draft"] or release["assets"] or release["target_commitish"] != commit:
+                      raise SystemExit("The empty draft migration was not applied as expected")
+                  existing_tag_commit = commit
+                  print("Moved the prior empty bot draft to the tested descendant commit")
+          elif existing_tag_commit not in (None, commit):
+              raise SystemExit("The existing tag points at a different commit")
           if tag_ref is None:
               # GITHUB_TOKEN-created tags do not recursively trigger release.yml.
               api(f"repos/{repo}/git/refs", fields={"ref": f"refs/tags/{tag}", "sha": commit})
           if release is None:
               gh("release", "create", tag, "--draft", "--prerelease", "--verify-tag", "--target", commit,
                  "--title", f"CodexControl {version} · Windows", "--notes-file", str(notes), "--latest=false")
-              release = api(release_path)
+              release = find_release()
+              if release is None:
+                  raise SystemExit("The created draft is not visible in the authenticated release list")
+          release_path = f"repos/{repo}/releases/{release['id']}"
 
           def verify_asset(asset):
               name = asset["name"]

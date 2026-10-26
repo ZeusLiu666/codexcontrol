@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import ctypes
+from pathlib import Path
+import re
 import unittest
 from ctypes import wintypes
 from types import SimpleNamespace
@@ -8,8 +10,44 @@ from unittest.mock import Mock, patch
 
 from codexcontrol_windows.native_window import (
     HWND_NOTOPMOST, HWND_TOPMOST, SW_RESTORE, SW_SHOW,
-    _Win32Api, apply_window_appearance, bring_window_to_front,
+    APP_USER_MODEL_ID, _Win32Api, apply_window_appearance, bring_window_to_front, set_app_identity,
 )
+
+
+class AppIdentityTests(unittest.TestCase):
+    def test_explicit_identity_matches_the_installer_shortcuts(self) -> None:
+        shell32 = Mock()
+        shell32.SetCurrentProcessExplicitAppUserModelID.return_value = 0
+        with patch("codexcontrol_windows.native_window.os.name", "nt"), patch(
+            "codexcontrol_windows.native_window.ctypes.WinDLL", return_value=shell32, create=True
+        ):
+            self.assertTrue(set_app_identity())
+        shell32.SetCurrentProcessExplicitAppUserModelID.assert_called_once_with(APP_USER_MODEL_ID)
+        self.assertEqual(shell32.SetCurrentProcessExplicitAppUserModelID.argtypes, [wintypes.LPCWSTR])
+        self.assertIs(shell32.SetCurrentProcessExplicitAppUserModelID.restype, ctypes.c_long)
+        installer = Path(__file__).resolve().parents[1] / "CodexControl.iss"
+        shortcut_ids = re.findall(r'AppUserModelID:\s*"([^"]+)"', installer.read_text(encoding="utf-8"))
+        self.assertEqual(shortcut_ids, [APP_USER_MODEL_ID] * 3)
+
+    def test_identity_failure_does_not_prevent_the_application_starting(self) -> None:
+        for failure in (OSError("Unavailable"), AttributeError("Unsupported")):
+            with self.subTest(failure=failure), patch("codexcontrol_windows.native_window.os.name", "nt"), patch(
+                "codexcontrol_windows.native_window.ctypes.WinDLL", side_effect=failure, create=True
+            ):
+                self.assertFalse(set_app_identity())
+        shell32 = Mock()
+        shell32.SetCurrentProcessExplicitAppUserModelID.return_value = -1
+        with patch("codexcontrol_windows.native_window.os.name", "nt"), patch(
+            "codexcontrol_windows.native_window.ctypes.WinDLL", return_value=shell32, create=True
+        ):
+            self.assertFalse(set_app_identity())
+
+    def test_other_platforms_do_not_load_the_windows_shell(self) -> None:
+        with patch("codexcontrol_windows.native_window.os.name", "posix"), patch(
+            "codexcontrol_windows.native_window.ctypes.WinDLL", create=True
+        ) as load:
+            self.assertFalse(set_app_identity())
+        load.assert_not_called()
 
 
 class NativeWindowTests(unittest.TestCase):
