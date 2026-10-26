@@ -86,6 +86,9 @@ jobs:
           Path(os.environ["RUNNER_TEMP"], "codexcontrol-tests.json").write_text(json.dumps(report), encoding="utf-8")
           if not result.wasSuccessful():
               raise SystemExit(1)
+      - name: Test release command discovery and safe cleanup
+        shell: pwsh
+        run: ./windows/tools/test-release-support.ps1
       - name: Install the pinned official installer compiler
         id: compiler
         shell: pwsh
@@ -116,7 +119,7 @@ jobs:
           RELEASE_VERSION: ${{ steps.release.outputs.version }}
           INNO_SETUP_COMPILER: ${{ steps.compiler.outputs.path }}
         run: |
-          $pythonExecutable = (Get-Command python.exe -CommandType Application -ErrorAction Stop).Source
+          $pythonExecutable = (Get-Command python.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
           ./windows/package_release.ps1 -Python $pythonExecutable -Clean -Version $env:RELEASE_VERSION -InnoSetupCompiler $env:INNO_SETUP_COMPILER
       - name: Bind verified artifact hashes to the tested commit
         shell: python

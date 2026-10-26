@@ -1,6 +1,6 @@
 function Resolve-ReleaseCommand([string]$Command) {
-    $resolved = Get-Command $Command -CommandType Application -ErrorAction Stop
-    return $resolved.Source
+    $resolved = Get-Command $Command -CommandType Application -ErrorAction Stop | Select-Object -First 1
+    return [string]$resolved.Source
 }
 
 function Invoke-ReleaseCommand([string]$Executable, [string[]]$Arguments) {
