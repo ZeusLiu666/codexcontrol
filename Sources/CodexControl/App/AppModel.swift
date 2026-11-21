@@ -23,6 +23,7 @@ final class AppModel: ObservableObject {
     @Published var pendingRemovalAccount: StoredAccount?
     @Published var statusMessage: String?
 
+    let geminiAppQuota = GeminiAppQuotaModel()
     private let accountStore = AccountStore()
     private let snapshotStore = SnapshotStore()
     private let accountManager = CodexAccountManager()
@@ -58,14 +59,13 @@ final class AppModel: ObservableObject {
     }
 
     var filteredAccounts: [StoredAccount] {
-        let trimmedQuery = self.accountCount > 5
-            ? self.searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            : ""
+        let trimmedQuery = self.searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
 
         let filtered = self.accounts.filter { account in
             guard !trimmedQuery.isEmpty else { return true }
             let haystacks = [
                 account.displayName,
+                self.runtimeStates[account.id]?.snapshot?.email ?? "",
                 account.emailHint ?? "",
                 account.authSubject ?? "",
                 account.providerAccountID ?? "",
@@ -293,8 +293,9 @@ final class AppModel: ObservableObject {
     }
 
     func refresh(account: StoredAccount) async {
+        guard self.accounts.contains(where: { $0.id == account.id }) else { return }
         guard !self.isDuplicateAccount(account) else {
-            self.statusMessage = "This account slot contains a duplicate login. Reauthenticate it to restore the missing account."
+            self.statusMessage = "此账号使用了重复的登录凭据，请重新登录以恢复账号。"
             return
         }
         var state = self.runtimeStates[account.id] ?? AccountRuntimeState()
@@ -329,13 +330,13 @@ final class AppModel: ObservableObject {
             return
         }
 
-        self.statusMessage = "Cancelling account setup."
+        self.statusMessage = "正在取消添加账号…"
         self.addAccountTask?.cancel()
     }
 
     private func addAccount() async {
         self.isAddingAccount = true
-        self.statusMessage = "Complete or cancel the Codex sign-in flow in your browser."
+        self.statusMessage = "请在浏览器中完成 Codex 登录，或在加号菜单中取消。"
         defer {
             self.isAddingAccount = false
             self.addAccountTask = nil
@@ -347,12 +348,12 @@ final class AppModel: ObservableObject {
             self.accounts = self.accountStore.merge(existing: self.accounts, incoming: [account])
             try self.accountStore.saveAccounts(self.accounts, removedAccounts: self.removedAccounts)
             self.selectedAccountID = self.accounts.first(where: { $0.matches(account) })?.id ?? account.id
-            self.statusMessage = "\(account.displayName) added."
+            self.statusMessage = "已添加“\(account.displayName)”。"
             if let selectedAccount = self.selectedAccount {
                 await self.refresh(account: selectedAccount)
             }
         } catch is CancellationError {
-            self.statusMessage = "Account setup cancelled."
+            self.statusMessage = "已取消添加账号。"
         } catch {
             self.statusMessage = error.localizedDescription
         }
@@ -364,7 +365,7 @@ final class AppModel: ObservableObject {
         }
 
         self.reauthenticatingAccountID = account.id
-        self.statusMessage = "Waiting for \(account.displayName) to sign in again."
+        self.statusMessage = "正在等待“\(account.displayName)”重新登录…"
         defer {
             self.reauthenticatingAccountID = nil
         }
@@ -374,7 +375,7 @@ final class AppModel: ObservableObject {
             self.restoreRemovedAccount(updated)
             self.mergeAccount(updated)
             try self.accountStore.saveAccounts(self.accounts, removedAccounts: self.removedAccounts)
-            self.statusMessage = "\(updated.displayName) reauthenticated."
+            self.statusMessage = "“\(updated.displayName)”已重新登录。"
             if let refreshed = self.accounts.first(where: { $0.id == account.id }) {
                 await self.refresh(account: refreshed)
             }
@@ -385,11 +386,11 @@ final class AppModel: ObservableObject {
 
     func switchAccount(_ account: StoredAccount) async {
         guard !self.isDuplicateAccount(account) else {
-            self.statusMessage = "This account slot contains a duplicate login. Reauthenticate it before switching."
+            self.statusMessage = "此账号使用了重复的登录凭据，请先重新登录再切换。"
             return
         }
         guard !self.isActiveAccount(account) else {
-            self.statusMessage = "\(account.displayName) is already the active Codex account."
+            self.statusMessage = "当前已在使用“\(account.displayName)”。"
             return
         }
 
@@ -405,7 +406,7 @@ final class AppModel: ObservableObject {
             self.refreshActiveIdentity()
             await self.refreshTokenUsage()
             self.selectedAccountID = self.accounts.first(where: { $0.matches(account) })?.id ?? self.selectedAccountID
-            self.statusMessage = "Switched to \(account.displayName). Restarting Codex Desktop."
+            self.statusMessage = "已切换至“\(account.displayName)”，正在重启 Codex Desktop。"
 
             if let refreshed = self.accounts.first(where: { $0.matches(account) }) {
                 await self.refresh(account: refreshed)
@@ -420,7 +421,7 @@ final class AppModel: ObservableObject {
                 self.statusMessage = nil
                 await self.refreshTokenUsage()
             } catch {
-                self.statusMessage = "Switched to \(account.displayName), but \(error.localizedDescription)"
+                self.statusMessage = "已切换至“\(account.displayName)”。桌面客户端提示：\(error.localizedDescription)"
             }
         } catch {
             self.statusMessage = error.localizedDescription
@@ -505,23 +506,36 @@ final class AppModel: ObservableObject {
 
     private func remove(_ account: StoredAccount) {
         let removedIdentity = RemovedAccountIdentity(account: account)
-        self.removedAccounts.removeAll { $0.matches(account) }
-        self.removedAccounts.append(removedIdentity)
-
-        self.accounts.removeAll { $0.id == account.id || removedIdentity.matches($0) }
-        self.runtimeStates.removeValue(forKey: account.id)
-        self.tokenUsageStates.removeValue(forKey: account.id)
-
+        let removed = self.accounts.filter { $0.id == account.id || removedIdentity.matches($0) }
+        let removedIDs = Set(removed.map(\.id))
+        guard !removedIDs.isEmpty else { return }
+        if let reauthenticatingAccountID, removedIDs.contains(reauthenticatingAccountID) {
+            self.statusMessage = "请等待此账号完成重新登录，再移除账号。"
+            return
+        }
+        let remaining = self.accounts.filter { !removedIDs.contains($0.id) }
+        let tombstones = self.removedAccounts.filter { !$0.matches(account) } + [removedIdentity]
         do {
-            try self.accountManager.removeManagedFilesIfOwned(account)
-            try self.accountStore.saveAccounts(self.accounts, removedAccounts: self.removedAccounts)
+            let cleanupError = try self.accountManager.removeAccount(account, tombstone: removedIdentity) {
+                try self.accountStore.saveAccounts(remaining, removedAccounts: tombstones)
+            }
+            self.accounts = remaining
+            self.removedAccounts = tombstones
+            self.runtimeStates = self.runtimeStates.filter { !removedIDs.contains($0.key) }
+            self.tokenUsageStates = self.tokenUsageStates.filter { !removedIDs.contains($0.key) }
             self.ensureSelection()
-            self.statusMessage = "\(account.displayName) removed."
+            self.statusMessage = "已移除“\(account.displayName)”。"
+            if let cleanupError {
+                self.statusMessage = "已移除账号，本地临时文件将在下次启动时重试清理：\(cleanupError.localizedDescription)"
+            }
+            self.persistSnapshotsSilently()
+            self.persistWidgetSnapshotSilently()
             Task { [weak self] in
                 guard let self else { return }
                 do {
-                    self.tokenUsageStates = try await self.tokenUsageTracker.removeAccount(account.id)
-                    self.persistWidgetSnapshotSilently()
+                    for id in removedIDs {
+                        _ = try await self.tokenUsageTracker.removeAccount(id)
+                    }
                 } catch {
                     self.statusMessage = error.localizedDescription
                 }
@@ -532,6 +546,7 @@ final class AppModel: ObservableObject {
     }
 
     private func applyRefreshResult(_ result: Result<AccountUsageSnapshot, Error>, to accountID: UUID) {
+        guard self.accounts.contains(where: { $0.id == accountID }) else { return }
         var state = self.runtimeStates[accountID] ?? AccountRuntimeState()
         state.isLoading = false
 
@@ -626,7 +641,7 @@ final class AppModel: ObservableObject {
                 activeAccountID: self.activeAccountID)
         } catch {
             if self.statusMessage == nil {
-                self.statusMessage = "Widget data could not be updated: \(error.localizedDescription)"
+                self.statusMessage = "小组件数据更新失败：\(error.localizedDescription)"
             }
         }
     }
@@ -646,7 +661,7 @@ final class AppModel: ObservableObject {
             self.persistWidgetSnapshotSilently()
         } catch {
             if self.statusMessage == nil {
-                self.statusMessage = "Token statistics could not be updated: \(error.localizedDescription)"
+                self.statusMessage = "Token 统计更新失败：\(error.localizedDescription)"
             }
         }
     }

@@ -8,6 +8,12 @@ All notable changes to this project will be documented in this file. Earlier ver
 
 The format is based on Keep a Changelog and this project uses Semantic Versioning.
 
+### [1.4.1] - 2026-11-21
+
+- **macOS** — Show Codex and Gemini App quotas in one menu-bar panel. Account headers support keyboard expansion, refresh shows progress, and Escape cancels removal. Gemini cards distinguish live and saved readings and recognize Traditional Chinese reset and error messages.
+- **macOS sign-in** — Stop a timed-out or cancelled login process and drain its output while it runs, so a full output pipe cannot stall sign-in. Failed account removal now preserves the visible entry and its credentials.
+- **Windows** — Show matching account counts during search, clear the query with Escape, and distinguish quota refresh from Token scanning. Correct long-list scrollbar dragging and clear outdated remote-status tooltips.
+
 ### [1.2.9] - 2026-10-26
 
 #### Windows
@@ -154,6 +160,12 @@ The format is based on Keep a Changelog and this project uses Semantic Versionin
 本文件记录项目的所有重要变更。较早版本的条目描述当时的行为，不一定代表当前版本。
 
 格式参考 Keep a Changelog，项目采用语义化版本控制（Semantic Versioning）。
+
+### [1.4.1] - 2026-11-21
+
+- **macOS** — 菜单栏面板同时显示 Codex 与 Gemini App 的额度。账号支持键盘展开，手动刷新显示进度，Esc 可取消移除账号。Gemini 卡片区分实时和已保存的读数，并识别繁体中文重置时间及加载失败提示。
+- **macOS 登录** — 登录超时或取消时终止对应进程，同时持续读取输出，修复登录长时间无法返回的问题。移除账号失败时保留列表条目和已保存的凭据。
+- **Windows** — 搜索时显示匹配数，按 Esc 清除查询。界面分别显示额度刷新和 Token 扫描周期，修复长列表滚动条拖动偏移及远端状态提示残留。
 
 ### [1.2.9] - 2026-10-26
 

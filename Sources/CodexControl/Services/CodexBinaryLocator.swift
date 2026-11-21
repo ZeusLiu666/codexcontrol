@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 enum CodexBinaryLocator {
@@ -11,6 +12,9 @@ enum CodexBinaryLocator {
 
     private static func pathCandidates() -> [String] {
         var candidates: [String] = []
+
+        candidates.append(contentsOf: self.bundledCodexCandidates())
+
         let envPath = ProcessInfo.processInfo.environment["PATH"] ?? ""
 
         for component in envPath.split(separator: ":").map(String.init) where !component.isEmpty {
@@ -27,6 +31,22 @@ enum CodexBinaryLocator {
         ])
 
         return Array(NSOrderedSet(array: candidates)) as? [String] ?? candidates
+    }
+
+    private static func bundledCodexCandidates() -> [String] {
+        guard let applicationURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.openai.codex") else {
+            return []
+        }
+
+        let cliDirectory = applicationURL
+            .appendingPathComponent("Contents", isDirectory: true)
+            .appendingPathComponent("Resources", isDirectory: true)
+            .appendingPathComponent("codex-cli", isDirectory: true)
+
+        return [
+            cliDirectory.appendingPathComponent("bin/codex").path,
+            cliDirectory.appendingPathComponent("CodexCLI.app/Contents/MacOS/codex").path,
+        ]
     }
 
     private static func resolveFromLoginShell() -> String? {

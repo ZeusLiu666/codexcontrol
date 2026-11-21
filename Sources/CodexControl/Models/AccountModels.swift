@@ -432,10 +432,10 @@ struct UsageWindowSnapshot: Codable, Sendable {
     }
 
     private static let resetAtFormat = Date.FormatStyle(date: .abbreviated, time: .shortened)
-    private static let compactResetAtFormat = Date.FormatStyle()
+    static let compactResetAtFormat = Date.FormatStyle()
         .month(.abbreviated)
         .day()
-        .hour(.defaultDigits(amPM: .omitted))
+        .hour()
         .minute(.twoDigits)
 }
 

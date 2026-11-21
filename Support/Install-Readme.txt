@@ -1,4 +1,4 @@
-CodexControl 1.2.8 (build 17)
+CodexControl 1.4.1 (build 23)
 Maintained by CodexControl contributors
 
 INSTALL
@@ -36,11 +36,8 @@ https://github.com/ZeusLiu666/codexcontrol
 
 git clone https://github.com/ZeusLiu666/codexcontrol.git
 
-For the current source, use the main branch. The Release also includes the
-combined source attachment CodexControl-1.2.8-source-sanitized.zip.
-Automatic Source code archives reflect the commit attached to their tag;
-older tags may predate the unified source. Check the Release notes and
-corresponding checksum files before choosing an archive.
+The GitHub Release includes source archives for the tagged commit.
+To build this version from a clone, check out v1.4.1-zeusliu.1.
 
 CREDITS
 
@@ -57,7 +54,7 @@ MIT License; see LICENSE.txt and NOTICE.txt.
 
 ---
 
-CodexControl 1.2.8（构建 17）
+CodexControl 1.4.1（构建 23）
 由 CodexControl contributors 维护
 
 安装
@@ -94,10 +91,8 @@ https://github.com/ZeusLiu666/codexcontrol
 
 git clone https://github.com/ZeusLiu666/codexcontrol.git
 
-当前源码请使用 main 分支。Release 另提供两平台合并源码附件
-CodexControl-1.2.8-source-sanitized.zip。
-GitHub 自动 Source code 归档对应标签指向的提交；旧标签可能早于
-两平台源码合并。选择归档时请核对 Release 说明及对应校验文件。
+GitHub Release 提供该版本标签对应的源码归档。
+从克隆的仓库构建此版本时，请检出 v1.4.1-zeusliu.1。
 
 署名
 

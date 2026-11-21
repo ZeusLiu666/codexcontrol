@@ -2,21 +2,31 @@ import SwiftUI
 
 struct DashboardHeaderView: View {
     @ObservedObject var model: AppModel
+    @ObservedObject var gemini: GeminiAppQuotaModel
+    let onConnectGemini: () -> Void
     @State private var isMessageExpanded = false
     @State private var isRemoteExpanded = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top, spacing: 10) {
+            HStack(alignment: .center, spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Codex")
-                        .font(.system(size: 14, weight: .semibold))
-                    Text("\(self.model.accountCount) accounts · \(TokenCountFormatter.compact(self.model.todayTokenCount)) tokens today")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    Text("UsageControl")
+                        .font(.system(size: 19, weight: .semibold, design: .rounded))
+                        .accessibilityAddTraits(.isHeader)
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text("Codex 今日用量")
+                        Text(TokenCountFormatter.compact(model.todayTokenCount))
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.primary)
+                            .monospacedDigit()
+                        Text("tokens")
+                    }
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .accessibilityElement(children: .combine)
 
-                    if let attentionSummary = self.attentionSummary {
+                    if let attentionSummary {
                         Text(attentionSummary)
                             .font(.system(size: 10, weight: .medium))
                             .foregroundStyle(.orange)
@@ -25,43 +35,56 @@ struct DashboardHeaderView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 HStack(spacing: 7) {
-                    Button {
-                        if self.model.isAddingAccount {
-                            self.model.cancelAddAccount()
-                        } else {
-                            self.model.startAddAccount()
+                    Menu {
+                        Button(model.isAddingAccount ? "取消 Codex 登录" : "添加 Codex 账号") {
+                            model.searchText = ""
+                            if model.isAddingAccount { model.cancelAddAccount() }
+                            else { model.startAddAccount() }
                         }
+                        Button("连接 Gemini App 并后台更新", action: onConnectGemini)
+                            .disabled(gemini.isRefreshing)
+                        Button("在 Gemini 中添加或切换账号") {
+                            Task { await gemini.manageAccounts() }
+                        }
+                        .disabled(gemini.isRefreshing)
                     } label: {
-                        Image(systemName: self.model.isAddingAccount ? "xmark" : "plus")
+                        Image(systemName: "plus")
                             .font(.system(size: 13, weight: .semibold))
                             .frame(width: 28, height: 28)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(self.model.isAddingAccount ? Color.accentColor.opacity(0.14) : Color(NSColor.controlBackgroundColor)))
+                            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
                     }
+                    .menuStyle(.button)
                     .buttonStyle(.plain)
-                    .accessibilityLabel(self.model.isAddingAccount ? "Cancel account setup" : "Add account")
-                    .help(self.model.isAddingAccount ? "Cancel account setup" : "Add account")
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .accessibilityLabel("添加账号")
+                    .help("添加账号")
 
                     Button {
-                        Task { await self.model.refreshAll() }
+                        Task {
+                            async let codex: Void = model.refreshAll()
+                            async let chat: Void = gemini.refreshOpenPanel()
+                            _ = await (codex, chat)
+                        }
                     } label: {
-                        Group {
-                            if self.model.isRefreshingAll {
-                                ProgressView()
-                                    .controlSize(.small)
+                        HStack(spacing: 5) {
+                            if isRefreshing {
+                                ProgressView().controlSize(.mini)
                             } else {
                                 Image(systemName: "arrow.clockwise")
-                                    .font(.system(size: 13, weight: .semibold))
                             }
+                            Text("刷新")
                         }
-                        .frame(width: 28, height: 28)
-                        .background(RoundedRectangle(cornerRadius: 8).fill(Color(NSColor.controlBackgroundColor)))
+                        .font(.system(size: 12, weight: .medium))
+                        .padding(.horizontal, 9)
+                        .frame(height: 28)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .controlBackgroundColor)))
                     }
                     .buttonStyle(.plain)
-                    .disabled(self.model.isRefreshingAll)
-                    .accessibilityLabel(self.model.isRefreshingAll ? "Refreshing all accounts" : "Refresh all accounts")
-                    .help(self.model.isRefreshingAll ? "Refreshing all accounts…" : "Refresh all accounts")
+                    .keyboardShortcut("r", modifiers: .command)
+                    .disabled(isRefreshing)
+                    .accessibilityLabel("刷新 Codex 账号和已打开的 Gemini 额度面板")
+                    .help("刷新 Codex 账号和已打开的 Gemini 额度面板")
                 }
             }
 
@@ -79,13 +102,15 @@ struct DashboardHeaderView: View {
         }
     }
 
+    private var isRefreshing: Bool { model.isRefreshingAll || gemini.isRefreshing }
+
     private var attentionSummary: String? {
         var parts: [String] = []
         if self.model.duplicateLoginCount > 0 {
-            parts.append("\(self.model.duplicateLoginCount) duplicate login")
+            parts.append("\(self.model.duplicateLoginCount) 个重复登录")
         }
         if self.model.lowQuotaCount > 0 {
-            parts.append("\(self.model.lowQuotaCount) low quota")
+            parts.append("\(self.model.lowQuotaCount) 个账号额度偏低")
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
@@ -97,7 +122,7 @@ struct DashboardHeaderView: View {
             } label: {
                 HStack(spacing: 5) {
                     Image(systemName: "network")
-                    Text(self.isRemoteExpanded ? "Remote status" : "Remote: \(text)")
+                    Text(self.isRemoteExpanded ? "远程用量状态" : "远程用量 · \(text)")
                         .lineLimit(1)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Image(systemName: self.isRemoteExpanded ? "chevron.up" : "chevron.down")
@@ -108,9 +133,9 @@ struct DashboardHeaderView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("Remote: \(text)")
-            .accessibilityLabel("Remote: \(text)")
-            .accessibilityHint(self.isRemoteExpanded ? "Collapse remote status" : "Expand full remote status")
+            .help("远程用量 · \(text)")
+            .accessibilityLabel("远程用量 · \(text)")
+            .accessibilityHint(self.isRemoteExpanded ? "收起远程状态" : "展开远程状态")
 
             if self.isRemoteExpanded {
                 CappedStatusText(text: text, fontSize: 10, maximumHeight: 45)
@@ -127,7 +152,7 @@ struct DashboardHeaderView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "info.circle")
-                        Text(self.isMessageExpanded ? "Status message" : message)
+                        Text(self.isMessageExpanded ? "状态信息" : message)
                             .lineLimit(1)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         Image(systemName: self.isMessageExpanded ? "chevron.up" : "chevron.down")
@@ -138,7 +163,7 @@ struct DashboardHeaderView: View {
                 .buttonStyle(.plain)
                 .help(message)
                 .accessibilityLabel(message)
-                .accessibilityHint(self.isMessageExpanded ? "Collapse status message" : "Expand full status message")
+                .accessibilityHint(self.isMessageExpanded ? "收起状态信息" : "展开状态信息")
 
                 Button {
                     self.model.statusMessage = nil
@@ -149,8 +174,8 @@ struct DashboardHeaderView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Dismiss status message")
-                .help("Dismiss status message")
+                .accessibilityLabel("关闭状态信息")
+                .help("关闭状态信息")
             }
 
             if self.isMessageExpanded {

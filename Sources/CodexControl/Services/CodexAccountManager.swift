@@ -14,21 +14,21 @@ enum CodexAccountManagerError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .binaryMissing:
-            return "The `codex` command could not be found."
+            return "找不到 Codex 命令。"
         case let .loginFailed(output):
-            return "The Codex sign-in flow did not complete.\n\(output)"
+            return "Codex 登录未完成。\n\(output)"
         case .loginTimedOut:
-            return "The Codex sign-in flow timed out."
+            return "Codex 登录超时，请重新尝试。"
         case .loginCancelled:
-            return "Account setup cancelled."
+            return "已取消添加账号。"
         case let .launchFailed(message):
-            return "Failed to start the Codex sign-in flow: \(message)"
+            return "无法启动 Codex 登录：\(message)"
         case .missingIdentity:
-            return "Sign-in completed, but the account identity could not be read."
+            return "已完成登录，读取账号身份时出错。"
         case .missingAuth:
-            return "The selected account does not contain `auth.json`."
+            return "所选账号缺少 auth.json。"
         case .unsafeDeletePath:
-            return "This path is not an app-managed home directory."
+            return "该目录不由 CodexControl 管理。"
         }
     }
 }
@@ -52,138 +52,118 @@ struct CodexSwitchResult {
     let backupPath: String?
 }
 
-private final class ManagedLoginProcess: @unchecked Sendable {
-    private let lock = NSLock()
-    private var process: Process?
+/// Drain output while the CLI is running. A browser or another descendant can
+/// inherit a pipe writer, so finishing must not depend on receiving EOF.
+private final class LoginOutput: @unchecked Sendable {
+    let pipe = Pipe()
+    private let queue = DispatchQueue(label: "CodexControl.login-output")
+    private var collected = Data()
+    private var reader: DispatchSourceRead?
 
-    func bind(_ process: Process) {
-        self.lock.lock()
-        self.process = process
-        self.lock.unlock()
-    }
+    deinit { reader?.cancel() }
 
-    func clear() {
-        self.lock.lock()
-        self.process = nil
-        self.lock.unlock()
-    }
-
-    func cancel() {
-        self.lock.lock()
-        let process = self.process
-        self.lock.unlock()
-
-        guard let process, process.isRunning else {
-            return
+    func start() throws {
+        let fd = pipe.fileHandleForReading.fileDescriptor
+        let flags = fcntl(fd, F_GETFL)
+        guard flags >= 0, fcntl(fd, F_SETFL, flags | O_NONBLOCK) == 0 else {
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
         }
+        let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: queue)
+        source.setEventHandler { [weak self] in self?.drain() }
+        reader = source
+        source.resume()
+    }
 
-        process.interrupt()
-        process.terminate()
+    func finish() -> String {
+        queue.sync {
+            reader?.cancel()
+            drain()
+            let output = String(decoding: collected, as: UTF8.self)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return output.isEmpty ? "登录进程未返回诊断信息。" : String(output.prefix(4000))
+        }
+    }
 
-        let pid = process.processIdentifier
-        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.75) {
-            guard process.isRunning, pid > 0 else {
+    private func drain() {
+        let fd = pipe.fileHandleForReading.fileDescriptor
+        var buffer = [UInt8](repeating: 0, count: 8192)
+        // Yield between batches even when a writer produces output continuously.
+        for _ in 0..<32 {
+            let count = Darwin.read(fd, &buffer, buffer.count)
+            if count == 0 {
+                reader?.cancel()
                 return
             }
-            kill(pid, SIGKILL)
+            if count < 0 {
+                if errno == EINTR { continue }
+                return
+            }
+            // Keep enough UTF-8 bytes for the diagnostic prefix while draining
+            // all additional output to prevent the writer blocking on a full pipe.
+            collected.append(contentsOf: buffer.prefix(min(count, 16_000 - collected.count)))
         }
     }
 }
 
 enum CodexLoginRunner {
-    static func run(homePath: String, timeout: TimeInterval = 180) async -> CodexLoginResult {
-        let loginProcess = ManagedLoginProcess()
+    static func run(homePath: String, timeout: TimeInterval = 180,
+                    binary: String? = CodexBinaryLocator.resolve()) async -> CodexLoginResult {
+        let process = Process()
 
         return await withTaskCancellationHandler {
-            guard let binary = CodexBinaryLocator.resolve() else {
-                return CodexLoginResult(outcome: .missingBinary, output: "")
-            }
+            guard !Task.isCancelled else { return CodexLoginResult(outcome: .cancelled, output: "") }
+            guard let binary else { return CodexLoginResult(outcome: .missingBinary, output: "") }
 
             var env = ProcessInfo.processInfo.environment
             env["CODEX_HOME"] = homePath
-
-            let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
             process.arguments = [binary, "login"]
             process.environment = env
 
-            let stdout = Pipe()
-            let stderr = Pipe()
-            process.standardOutput = stdout
-            process.standardError = stderr
-
+            let capture = LoginOutput()
+            process.standardOutput = capture.pipe
+            process.standardError = capture.pipe
             do {
+                try capture.start()
                 try process.run()
             } catch {
                 return CodexLoginResult(outcome: .launchFailed(error.localizedDescription), output: "")
             }
-            loginProcess.bind(process)
-            defer {
-                loginProcess.clear()
-            }
 
-            let timedOut = await self.wait(for: process, timeout: timeout)
-            if timedOut, process.isRunning {
-                process.terminate()
-            }
-
-            let output = await self.combinedOutput(stdout: stdout, stderr: stderr)
-            if Task.isCancelled {
-                return CodexLoginResult(outcome: .cancelled, output: output)
-            }
-            if timedOut {
-                return CodexLoginResult(outcome: .timedOut, output: output)
-            }
-
-            if process.terminationStatus == 0 {
-                return CodexLoginResult(outcome: .success, output: output)
-            }
-
-            return CodexLoginResult(outcome: .failed(status: process.terminationStatus), output: output)
-        } onCancel: {
-            loginProcess.cancel()
-        }
-    }
-
-    private static func wait(for process: Process, timeout: TimeInterval) async -> Bool {
-        await withTaskGroup(of: Bool.self) { group in
-            group.addTask {
-                process.waitUntilExit()
-                return false
-            }
-            group.addTask {
-                let nanoseconds = UInt64(max(0, timeout) * 1_000_000_000)
-                try? await Task.sleep(nanoseconds: nanoseconds)
+            if Task.isCancelled { stop(process) }
+            let deadline = Task {
+                do { try await Task.sleep(for: .seconds(max(0, timeout))) } catch { return false }
+                guard process.isRunning else { return false }
+                stop(process)
                 return true
             }
-
-            let result = await group.next() ?? false
-            group.cancelAll()
-            return result
+            await withCheckedContinuation { (finished: CheckedContinuation<Void, Never>) in
+                DispatchQueue.global(qos: .utility).async {
+                    process.waitUntilExit()
+                    finished.resume()
+                }
+            }
+            deadline.cancel()
+            let timedOut = await deadline.value
+            let output = capture.finish()
+            if Task.isCancelled { return CodexLoginResult(outcome: .cancelled, output: output) }
+            if timedOut { return CodexLoginResult(outcome: .timedOut, output: output) }
+            let outcome: CodexLoginResult.Outcome = process.terminationStatus == 0
+                ? .success : .failed(status: process.terminationStatus)
+            return CodexLoginResult(outcome: outcome, output: output)
+        } onCancel: {
+            stop(process)
         }
     }
 
-    private static func combinedOutput(stdout: Pipe, stderr: Pipe) async -> String {
-        async let stdoutData = self.readToEnd(stdout)
-        async let stderrData = self.readToEnd(stderr)
-        let merged = await [stdoutData, stderrData]
-            .compactMap { $0.isEmpty ? nil : $0 }
-            .joined(separator: "\n")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        return merged.isEmpty ? "No output captured." : String(merged.prefix(4000))
-    }
-
-    private static func readToEnd(_ pipe: Pipe) async -> String {
-        if #available(macOS 13.0, *),
-           let data = try? pipe.fileHandleForReading.readToEnd(),
-           let text = String(data: data, encoding: .utf8)
-        {
-            return text
+    private static func stop(_ process: Process) {
+        guard process.isRunning else { return }
+        let pid = process.processIdentifier
+        guard pid > 0 else { return }
+        _ = Darwin.kill(pid, SIGTERM)
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.75) {
+            if process.isRunning { _ = Darwin.kill(pid, SIGKILL) }
         }
-
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        return String(data: data, encoding: .utf8) ?? ""
     }
 }
 
@@ -216,35 +196,95 @@ struct CodexAccountManager {
         return try? CodexAPI.loadIdentity(codexHomePath: FileLocations.ambientCodexHome.path)
     }
 
-    func removeManagedFilesIfOwned(_ account: StoredAccount) throws {
+    // The tombstone's ID binds the atomic accounts.json write to its staged
+    // directories. On startup, an interrupted transaction can be finished or undone.
+    func removeAccount(_ account: StoredAccount, tombstone: RemovedAccountIdentity,
+                       persist: () throws -> Void) throws -> Error? {
         guard account.source.ownsFiles else {
-            return
+            try persist()
+            return nil
         }
 
-        let root = FileLocations.managedHomesDirectory.standardizedFileURL.path
-        let targets = try self.managedHomePathsMatching(account)
-        let prefix = root.hasSuffix("/") ? root : root + "/"
-
-        for target in targets {
-            guard target.hasPrefix(prefix) else {
-                throw CodexAccountManagerError.unsafeDeletePath
+        return try withManagedHomesLock { root in
+            let fm = FileManager.default
+            let targets = try managedHomePathsMatching(account).compactMap { path -> URL? in
+                let target = URL(fileURLWithPath: path).standardizedFileURL
+                guard target.deletingLastPathComponent().path == root.path,
+                      !target.lastPathComponent.hasPrefix(".") else {
+                    throw CodexAccountManagerError.unsafeDeletePath
+                }
+                var info = stat()
+                guard lstat(target.path, &info) == 0 else {
+                    if errno == ENOENT { return nil }
+                    throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+                }
+                guard (info.st_mode & S_IFMT) == S_IFDIR else {
+                    throw CodexAccountManagerError.unsafeDeletePath
+                }
+                return target
             }
-
-            if FileManager.default.fileExists(atPath: target) {
-                try FileManager.default.removeItem(atPath: target)
+            let stage = root.appendingPathComponent(".removing-" + tombstone.id.uuidString)
+            try fm.createDirectory(at: stage, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+            do {
+                for target in targets {
+                    try fm.moveItem(at: target, to: stage.appendingPathComponent(target.lastPathComponent))
+                }
+                try persist()
+            } catch {
+                try restoreStagedHomes(from: stage, to: root)
+                throw error
+            }
+            do {
+                try fm.removeItem(at: stage)
+                return nil
+            } catch {
+                // Removal is already committed. Discovery retries this cleanup.
+                return error
             }
         }
     }
 
-    func discoverManagedAccounts(existing: [StoredAccount]) throws -> [StoredAccount] {
+    private func withManagedHomesLock<T>(_ action: (URL) throws -> T) throws -> T {
         try FileLocations.ensureDirectories()
-        let homeURLs = try FileManager.default.contentsOfDirectory(
-            at: FileLocations.managedHomesDirectory,
-            includingPropertiesForKeys: [.creationDateKey, .contentModificationDateKey],
-            options: [.skipsHiddenFiles])
+        let root = FileLocations.managedHomesDirectory.standardizedFileURL
+        let lock = open(root.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW)
+        guard lock >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        defer { close(lock) }
+        guard flock(lock, LOCK_EX) == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        return try action(root)
+    }
 
-        return homeURLs.compactMap { homeURL in
-            self.discoveredManagedAccount(at: homeURL, existing: existing)
+    private func restoreStagedHomes(from stage: URL, to root: URL) throws {
+        let fm = FileManager.default
+        for home in try fm.contentsOfDirectory(at: stage, includingPropertiesForKeys: nil) {
+            try fm.moveItem(at: home, to: root.appendingPathComponent(home.lastPathComponent))
+        }
+        try fm.removeItem(at: stage)
+    }
+
+    func discoverManagedAccounts(existing: [StoredAccount]) throws -> [StoredAccount] {
+        try withManagedHomesLock { root in
+            let fm = FileManager.default
+            let entries = try fm.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+            let prefix = ".removing-"
+            let stages = entries.filter { $0.lastPathComponent.hasPrefix(prefix) }
+            if !stages.isEmpty {
+                let committed = Set(try AccountStore().loadRemovedAccounts().map(\.id))
+                for stage in stages {
+                    let suffix = stage.lastPathComponent.dropFirst(prefix.count)
+                    let values = try stage.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+                    guard let id = UUID(uuidString: String(suffix)), values.isDirectory == true,
+                          values.isSymbolicLink == false else { continue }
+                    if committed.contains(id) {
+                        // A leftover staged directory must not block the other accounts.
+                        try? fm.removeItem(at: stage)
+                    } else {
+                        try restoreStagedHomes(from: stage, to: root)
+                    }
+                }
+            }
+            let homes = try fm.contentsOfDirectory(at: root, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])
+            return homes.compactMap { discoveredManagedAccount(at: $0, existing: existing) }
         }
     }
 
@@ -374,8 +414,8 @@ struct CodexAccountManager {
     }
 
     private func discoveredManagedAccount(at homeURL: URL, existing: [StoredAccount]) -> StoredAccount? {
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: homeURL.path, isDirectory: &isDirectory), isDirectory.boolValue else {
+        guard let values = try? homeURL.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]),
+              values.isDirectory == true, values.isSymbolicLink == false else {
             return nil
         }
 
@@ -478,8 +518,6 @@ struct CodexAccountManager {
     }
 
     private func managedHomePathsMatching(_ account: StoredAccount) throws -> Set<String> {
-        try FileLocations.ensureDirectories()
-
         var targets: Set<String> = [
             URL(fileURLWithPath: account.codexHomePath, isDirectory: true).standardizedFileURL.path,
         ]

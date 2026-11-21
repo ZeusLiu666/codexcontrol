@@ -6,7 +6,7 @@ struct CodexControlApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            RootView(model: self.model)
+            RootView(model: self.model, gemini: self.model.geminiAppQuota)
         } label: {
             HStack(spacing: 0) {
                 Image(systemName: self.model.menuBarSymbol)

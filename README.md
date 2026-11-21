@@ -26,11 +26,11 @@ Choose the attachment for your platform from this repository's [Releases](https:
 | Windows 10 x64 version 1809 or later / Windows 11 x64 | `CodexControl-<version>-windows-x64-portable.zip` | Extract and run `CodexControl.exe`; no separate Python installation is needed |
 | macOS 14 or later, Apple Silicon | macOS arm64 `.dmg` / `.pkg` | Open the disk image or installer and follow the included instructions |
 
-The [Windows 1.2.9 release](https://github.com/ZeusLiu666/codexcontrol/releases/tag/v1.2.9-zeusliu.1) includes the updated application icon, a labeled Refresh button, and automatic discovery of Codex Desktop's bundled command. Windows executables are unsigned. macOS downloads remain in the [1.2.8 release](https://github.com/ZeusLiu666/codexcontrol/releases/tag/v1.2.8-zeusliu.1); that app is ad-hoc signed and has not been notarized by Apple. Check the platform-specific release notes and checksums before running a download.
+[CodexControl 1.4.1 for macOS and Windows](https://github.com/ZeusLiu666/codexcontrol/releases/tag/v1.4.1-zeusliu.1) includes both platforms’ downloads and SHA-256 checksums. The macOS app is ad-hoc signed and has no Apple notarization. The Windows binaries are unsigned.
 
 The Windows installer and portable archive run the same application. The portable app still stores accounts and runtime data in the current user's `%APPDATA%\CodexControl`, outside the extracted archive. Uninstalling the installed version preserves that user data. SHA-256 checksums are provided for Windows release attachments.
 
-Adding accounts and signing in again require an available Codex command. Windows 1.2.9 can use the command bundled with an installed Codex Desktop, including Microsoft Store/MSIX installations, without installing a separate CLI or changing PATH. Existing standalone CLI installations remain supported. Quota queries and sign-in need a network connection. Account switching may close and restart Codex Desktop; save your work first.
+Adding accounts and signing in again require an available Codex command. Windows can use the command bundled with an installed Codex Desktop, including Microsoft Store/MSIX installations, without installing a separate CLI or changing PATH. Existing standalone CLI installations remain supported. Quota queries and sign-in need a network connection. Account switching may close and restart Codex Desktop; save your work first.
 
 ### Features
 
@@ -51,6 +51,10 @@ Quotas come from the OpenAI API and depend on the account plan, permissions, net
 The app reads local Codex account `auth.json` files, refreshes login credentials when necessary, and requests quotas from OpenAI. Switching accounts updates the local login state in `~/.codex`. On Windows, it also saves and restores the account's Codex Desktop session cache, synchronizes global state, and restarts Desktop when needed.
 
 Token statistics extract input, cached input, output, reasoning, and total Token counts from local Codex session events. The first run establishes a baseline for existing local logs; subsequent runs count only newly completed events. This does not reconstruct all historical billing or calculate charges. Account attribution depends on the local login state and switches performed by the app; changing accounts directly in another tool can affect attribution.
+
+#### Gemini App quotas on macOS
+
+To view your Gemini allowance, open the plus menu in the dashboard and choose **连接 Gemini App 并后台更新**. Allow CodexControl in System Settings → Privacy & Security → Accessibility when prompted. The app reads the remaining percentages and reset times from the Gemini Mac app’s Usage limits panel. While the panel is open or minimized, CodexControl checks it every minute. Closing it pauses live updates and leaves the last reading visible. Sign-in and account switching happen in Gemini.
 
 #### Optional remote statistics
 
@@ -170,11 +174,11 @@ CodexControl 的两个系统版本在同一个仓库中维护，共用项目介�
 | Windows 10 x64 1809 及以上 / Windows 11 x64 | `CodexControl-<版本>-windows-x64-portable.zip` | 解压后运行 `CodexControl.exe`，无需另装 Python |
 | macOS 14 及以上，Apple Silicon | 现有 macOS arm64 `.dmg` / `.pkg` | 打开磁盘映像或安装程序，按附件说明安装 |
 
-本次 [Windows 1.2.9 更新](https://github.com/ZeusLiu666/codexcontrol/releases/tag/v1.2.9-zeusliu.1) 包含新应用图标、带文字的刷新按钮，以及 Codex Desktop 内置命令的自动识别。Windows 可执行程序未进行代码签名。macOS 下载仍位于 [1.2.8 Release](https://github.com/ZeusLiu666/codexcontrol/releases/tag/v1.2.8-zeusliu.1)，该应用使用本地临时签名（ad-hoc），尚未经过 Apple 公证。运行下载文件前请核对相应平台的发布说明和校验值。
+[CodexControl 1.4.1 双平台版本](https://github.com/ZeusLiu666/codexcontrol/releases/tag/v1.4.1-zeusliu.1) 提供 macOS 和 Windows 下载及 SHA-256 校验文件。macOS 应用采用 ad-hoc 签名，未经 Apple 公证。Windows 程序未签名。
 
 Windows 安装包和便携包运行的是同一程序。便携包仍将账号和运行数据保存在当前用户的 `%APPDATA%\CodexControl` 中，不会把账号保存在解压目录内。安装程序卸载时保留这些用户数据。Windows 发布附件提供 SHA-256 校验值。
 
-添加账号、重新登录等功能需要本机可用的 Codex 命令。Windows 1.2.9 可自动使用已安装 Codex Desktop 的内置命令，支持 Microsoft Store/MSIX 安装，无需另装 CLI 或修改 PATH；原有独立 CLI 安装仍受支持。额度查询和登录需要网络连接。账号切换可能关闭并重新启动 Codex Desktop，请先保存工作。
+添加账号、重新登录等功能需要本机可用的 Codex 命令。Windows 可自动使用已安装 Codex Desktop 的内置命令，支持 Microsoft Store/MSIX 安装，无需另装 CLI 或修改 PATH；原有独立 CLI 安装仍受支持。额度查询和登录需要网络连接。账号切换可能关闭并重新启动 Codex Desktop，请先保存工作。
 
 ### 功能
 
@@ -195,6 +199,10 @@ Windows 安装包和便携包运行的是同一程序。便携包仍将账号和
 程序读取本地 Codex 账号的 `auth.json`，在需要时刷新登录凭据，并向 OpenAI 请求额度。切换账号会更新本机 `~/.codex` 中的登录状态；Windows 版还会保存和恢复对应账号的 Codex Desktop 会话缓存、同步全局状态并按需重启 Desktop。
 
 Token 统计从本地 Codex 会话事件中提取输入、缓存输入、输出、推理及总 Token 数。首次运行为已有本地日志建立基线，随后只统计新增完整事件；它不是对全部历史账单的回溯，也不提供费用结算。账号归属依赖本地登录状态及程序执行的切换，直接在其他工具中更换账号可能影响归属。
+
+#### 在 macOS 上查看 Gemini App 额度
+
+在面板右上角的加号菜单选择「连接 Gemini App 并后台更新」，按提示在「系统设置 → 隐私与安全性 → 辅助功能」中允许 CodexControl。应用从 Gemini Mac 客户端的「用量限额」面板读取剩余百分比和重置时间。面板打开或最小化时，CodexControl 每分钟检查一次。关闭后暂停实时更新，仍可查看上次读数。登录和切换 Google 账号在 Gemini 客户端完成。
 
 #### 可选远程统计
 

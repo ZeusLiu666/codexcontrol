@@ -15,6 +15,7 @@ CodexControl manages Codex accounts locally. Both macOS and Windows need access 
 | Local Codex session events | Parse Token usage and read checkpoints locally; complete conversations are not uploaded to a project server |
 | Windows Codex Desktop state, session caches, and auth backups | Save, restore, and synchronize account sessions locally during switching; these may contain active sign-in sessions |
 | Optional SSH configuration and remote statistics | Used only after the user explicitly configures remote targets, as described below |
+| Gemini App usage panel (macOS) | Reads the usage and reset labels through macOS Accessibility and caches the reading locally in `GeminiApp/quota.json`. Google sign-in stays in Gemini. |
 | macOS Widget snapshots | Provide masked account labels, Token totals, and quota values to a local widget; masking is not anonymity or encryption |
 
 Quota and sign-in features communicate with OpenAI. Enabling SSH collection also connects to the servers configured by the user. Local-first does not mean fully offline; each network service's own data practices still apply.
@@ -72,6 +73,7 @@ CodexControl 在本机管理 Codex 账号。macOS 和 Windows 版本都需要访
 | 本地 Codex 会话事件 | 在本机解析 Token 使用量和读取进度，不作为完整对话上传至项目服务器 |
 | Windows Codex Desktop 状态、会话缓存和认证备份 | 切换账号时在本地保存、恢复和同步，可能含有效登录会话 |
 | 可选 SSH 配置与远端统计 | 仅在主动配置远程目标后使用，详见下文 |
+| Gemini App 用量面板（macOS） | 通过 macOS 辅助功能读取额度与重置时间，在本机 `GeminiApp/quota.json` 缓存读数。Google 登录由 Gemini 客户端处理。 |
 | macOS Widget 快照 | 向本地桌面组件提供遮盖后的账号标签、Token 汇总和额度值；遮盖不是匿名化或加密 |
 
 额度和登录功能需要与 OpenAI 服务通信。开启 SSH 统计后还会连接用户配置的服务器。本地优先不代表完全离线，网络服务各自的数据处理规则仍适用。

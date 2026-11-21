@@ -2,34 +2,61 @@ import SwiftUI
 
 struct RootView: View {
     @ObservedObject var model: AppModel
+    @ObservedObject var gemini: GeminiAppQuotaModel
+
+    private var showsSearch: Bool {
+        model.accountCount + gemini.accountSnapshots.count > 5
+    }
+
+    private var screen: CGRect {
+        let pointer = NSEvent.mouseLocation
+        let display = NSScreen.screens.first { $0.frame.contains(pointer) } ?? NSScreen.main
+        return display?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1024, height: 720)
+    }
 
     var body: some View {
+        let width = min(430, screen.width - 16)
         ZStack {
-            VStack(spacing: 10) {
-                DashboardHeaderView(model: self.model)
-                if self.model.accountCount > 5 {
-                    self.searchBar
+            ScrollViewReader { reader in
+                VStack(spacing: 10) {
+                    DashboardHeaderView(model: model, gemini: gemini, onConnectGemini: {
+                        model.searchText = ""
+                        reader.scrollTo("geminiTop", anchor: .top)
+                        Task { await gemini.connectForBackgroundUpdates() }
+                    })
+                    if showsSearch {
+                        searchBar
+                    }
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 10) {
+                            heading("Codex", symbol: "terminal", count: model.accountCount)
+                            codexContent
+                            heading("Gemini App", symbol: "sparkles").padding(.top, 4).id("geminiTop")
+                            GeminiDashboardView(model: gemini, search: model.searchText)
+                        }
+                    }
+                    .transformAnchorPreference(key: TokenDayDetailPreferenceKey.self, value: .bounds) { selection, viewport in
+                        selection?.viewport = viewport
+                    }
                 }
-                self.accountList
             }
-            .allowsHitTesting(self.model.pendingRemovalAccount == nil)
+            .disabled(model.pendingRemovalAccount != nil)
+            .accessibilityHidden(model.pendingRemovalAccount != nil)
 
-            if let pendingRemovalAccount = self.model.pendingRemovalAccount {
-                self.removalOverlay(for: pendingRemovalAccount)
+            if let account = model.pendingRemovalAccount {
+                removalOverlay(for: account)
             }
         }
         .padding(12)
-        .frame(width: 430, height: 580)
-        .background(Color(NSColor.windowBackgroundColor))
+        .frame(width: width, height: min(580, screen.height - 18))
+        .background(Color(nsColor: .windowBackgroundColor))
         .overlayPreferenceValue(TokenDayDetailPreferenceKey.self) { selection in
-            if let selection, self.model.pendingRemovalAccount == nil {
+            if let selection, model.pendingRemovalAccount == nil {
                 TokenDayDetailOverlay(selection: selection)
             }
         }
-        .onChange(of: self.model.accountCount) { _, accountCount in
-            if accountCount <= 5 {
-                self.model.searchText = ""
-            }
+        .onChange(of: showsSearch) { _, visible in
+            if !visible { model.searchText = "" }
         }
     }
 
@@ -38,7 +65,7 @@ struct RootView: View {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
 
-            TextField("Search accounts", text: self.$model.searchText)
+            TextField("搜索账号或邮箱", text: self.$model.searchText)
                 .textFieldStyle(.plain)
 
             if !self.model.searchText.isEmpty {
@@ -49,6 +76,7 @@ struct RootView: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("清除搜索")
             }
         }
         .padding(.horizontal, 10)
@@ -58,62 +86,61 @@ struct RootView: View {
                 .fill(Color(NSColor.controlBackgroundColor)))
     }
 
-    @ViewBuilder
-    private var accountList: some View {
-        if self.model.filteredAccounts.isEmpty {
-            if self.model.accountCount > 0 {
-                ContentUnavailableView {
-                    Label("No matching accounts", systemImage: "magnifyingglass")
-                } description: {
-                    Text("Try another name or email.")
-                } actions: {
-                    Button("Clear search") {
-                        self.model.searchText = ""
-                    }
-                    .buttonStyle(.bordered)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                ContentUnavailableView(
-                    "No Accounts",
-                    systemImage: "tray",
-                    description: Text("Add a Codex account to start tracking quota."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    private func heading(_ title: String, symbol: String, count: Int? = nil) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: symbol)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            Text(title).font(.system(size: 13, weight: .semibold))
+            if let count {
+                Text("\(count) 个账号")
+                    .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
             }
-        } else {
-            ScrollView {
-                LazyVStack(spacing: 10) {
-                    ForEach(self.model.filteredAccounts) { account in
-                        let isSelected = self.model.selectedAccountID == account.id
-                        let nextSelection = isSelected ? nil : account.id
+            Rectangle()
+                .fill(.separator)
+                .frame(height: 0.5)
+                .padding(.leading, 2)
+                .accessibilityHidden(true)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
+        .padding(.horizontal, 2)
+    }
 
-                        AccountRowView(
-                            account: account,
-                            displayName: self.model.displayName(for: account),
-                            state: self.model.runtimeState(for: account.id),
-                            tokenUsage: self.model.tokenUsage(for: account.id),
-                            isDuplicateLogin: self.model.isDuplicateAccount(account),
-                            isActive: self.model.isActiveAccount(account),
-                            canSwitch: self.model.canSwitchAccount(account),
-                            isSelected: isSelected,
-                            isReauthenticating: self.model.reauthenticatingAccountID == account.id,
-                            onSelect: {
-                                self.model.selectedAccountID = nextSelection
-                            },
-                            onSaveNickname: { self.model.updateNickname(for: account.id, nickname: $0) },
-                            onRefresh: { Task { await self.model.refresh(account: account) } },
-                            onSwitch: { Task { await self.model.switchAccount(account) } },
-                            onReauthenticate: { Task { await self.model.reauthenticate(account) } },
-                            onOpenFolder: { self.model.openFolder(for: account) },
-                            onRemove: { self.model.requestRemoval(of: account) })
-                    }
-                }
-                .padding(.vertical, 4)
+    private var codexContent: some View {
+        LazyVStack(alignment: .leading, spacing: 8) {
+            if model.filteredAccounts.isEmpty {
+                Text(model.accounts.isEmpty ? "尚未添加 Codex 账号" : "没有匹配的 Codex 账号")
+                    .font(.callout).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(10)
             }
-            .transformAnchorPreference(key: TokenDayDetailPreferenceKey.self, value: .bounds) { selection, viewport in
-                selection?.viewport = viewport
+            ForEach(self.model.filteredAccounts) { account in
+                let isSelected = self.model.selectedAccountID == account.id
+                let nextSelection = isSelected ? nil : account.id
+
+                AccountRowView(
+                    account: account,
+                    displayName: self.model.displayName(for: account),
+                    state: self.model.runtimeState(for: account.id),
+                    tokenUsage: self.model.tokenUsage(for: account.id),
+                    isDuplicateLogin: self.model.isDuplicateAccount(account),
+                    isActive: self.model.isActiveAccount(account),
+                    canSwitch: self.model.canSwitchAccount(account),
+                    isSelected: isSelected,
+                    isReauthenticating: self.model.reauthenticatingAccountID == account.id,
+                    onSelect: {
+                        self.model.selectedAccountID = nextSelection
+                    },
+                    onSaveNickname: { self.model.updateNickname(for: account.id, nickname: $0) },
+                    onRefresh: { Task { await self.model.refresh(account: account) } },
+                    onSwitch: { Task { await self.model.switchAccount(account) } },
+                    onReauthenticate: { Task { await self.model.reauthenticate(account) } },
+                    onOpenFolder: { self.model.openFolder(for: account) },
+                    onRemove: { self.model.requestRemoval(of: account) })
             }
         }
+        .padding(.vertical, 1)
     }
 
     private func removalOverlay(for account: StoredAccount) -> some View {
@@ -125,36 +152,27 @@ struct RootView: View {
                 }
 
             VStack(alignment: .leading, spacing: 12) {
-                Text("Remove Account")
+                Text("移除账号")
                     .font(.system(size: 14, weight: .semibold))
 
-                Text("\(account.displayName) will be removed from CodexControl.")
+                Text("将从 CodexControl 中移除“\(model.displayName(for: account))”。")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
 
                 HStack(spacing: 8) {
                     Spacer()
 
-                    Button("Cancel") {
-                        self.model.cancelPendingRemoval()
+                    Button("取消", role: .cancel) {
+                        model.cancelPendingRemoval()
                     }
-                    .buttonStyle(.plain)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(Color(NSColor.controlBackgroundColor)))
+                    .keyboardShortcut(.cancelAction)
+                    .buttonStyle(.bordered)
 
-                    Button("Remove") {
-                        self.model.confirmPendingRemoval()
+                    Button("移除", role: .destructive) {
+                        model.confirmPendingRemoval()
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(Color.red))
+                    .buttonStyle(.borderedProminent)
+                    .tint(.red)
                 }
             }
             .padding(14)

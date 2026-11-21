@@ -36,17 +36,17 @@ struct TokenContributionHeatmap: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
             HStack {
-                Text("Hover or select a day")
+                Text("悬停或点选日期")
                     .font(.system(size: 9))
                 Spacer(minLength: 8)
                 HStack(spacing: 3) {
-                    Text("Less")
+                    Text("少")
                     ForEach(0 ... 4, id: \.self) { level in
                         RoundedRectangle(cornerRadius: 2)
                             .fill(self.legendColor(level: level))
                             .frame(width: 7, height: 7)
                     }
-                    Text("More")
+                    Text("多")
                 }
                 .font(.system(size: 8))
                 .accessibilityHidden(true)
@@ -72,7 +72,7 @@ struct TokenContributionHeatmap: View {
             }
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Daily token usage, last seven days")
+        .accessibilityLabel("最近七天的 token 用量")
     }
 
     private func dayButton(_ point: DailyTokenUsagePoint) -> some View {
@@ -100,7 +100,7 @@ struct TokenContributionHeatmap: View {
                             .strokeBorder(isSelected ? Color.accentColor : .clear, lineWidth: 1.5)
                     }
 
-                Text(isToday ? "Today" : point.date.formatted(.dateTime.weekday(.narrow)))
+                Text(isToday ? "今天" : point.date.formatted(.dateTime.weekday(.narrow)))
                     .font(.system(size: 9, weight: .medium))
                 Text(point.date.formatted(.dateTime.day()))
                     .font(.system(size: 9, weight: isToday ? .semibold : .regular).monospacedDigit())
@@ -130,7 +130,7 @@ struct TokenContributionHeatmap: View {
         }
         .accessibilityLabel(point.date.formatted(.dateTime.weekday(.wide).month(.wide).day().year()))
         .accessibilityValue("\(TokenCountFormatter.full(point.usage.totalTokens)) total tokens. Input \(TokenCountFormatter.full(point.usage.inputTokens)), including \(TokenCountFormatter.full(point.usage.cachedInputTokens)) cached. Output \(TokenCountFormatter.full(point.usage.outputTokens)), including \(TokenCountFormatter.full(point.usage.reasoningOutputTokens)) reasoning.")
-        .accessibilityHint(self.pinnedDay == point.id ? "Dismiss day details" : "Pin exact token details")
+        .accessibilityHint(self.pinnedDay == point.id ? "收起当日详情" : "固定当日用量")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
@@ -201,7 +201,7 @@ private struct TokenDayDetailCard: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(self.selection.point.date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().year()))
                         .font(.system(size: 12, weight: .semibold))
-                    Text(Calendar.autoupdatingCurrent.isDateInToday(self.selection.point.date) ? "Today · so far" : "Daily token usage")
+                    Text(Calendar.autoupdatingCurrent.isDateInToday(self.selection.point.date) ? "今日累计" : "当日 token 用量")
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                 }
@@ -216,7 +216,7 @@ private struct TokenDayDetailCard: View {
                     }
                     .buttonStyle(.plain)
                     .keyboardShortcut(.cancelAction)
-                    .accessibilityLabel("Close day details")
+                    .accessibilityLabel("关闭当日详情")
                 }
             }
 
@@ -233,13 +233,13 @@ private struct TokenDayDetailCard: View {
             Divider()
 
             VStack(spacing: 5) {
-                self.metric("Input", value: self.selection.point.usage.inputTokens)
-                self.metric("Cached input", value: self.selection.point.usage.cachedInputTokens, isSubset: true)
-                self.metric("Output", value: self.selection.point.usage.outputTokens)
-                self.metric("Reasoning", value: self.selection.point.usage.reasoningOutputTokens, isSubset: true)
+                self.metric("输入", value: self.selection.point.usage.inputTokens)
+                self.metric("缓存输入", value: self.selection.point.usage.cachedInputTokens, isSubset: true)
+                self.metric("输出", value: self.selection.point.usage.outputTokens)
+                self.metric("推理", value: self.selection.point.usage.reasoningOutputTokens, isSubset: true)
             }
 
-            Text("Cached input and reasoning are included above.")
+            Text("输入包含缓存输入，输出包含推理。")
                 .font(.system(size: 9))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

@@ -25,7 +25,7 @@ cd "$ROOT_DIR"
 swift build "${BUILD_FLAGS[@]}"
 BIN_DIR="$(swift build "${BUILD_FLAGS[@]}" --show-bin-path)"
 rm -rf "$APP_DIR"
-mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources" "$WIDGET_DIR/Contents/MacOS"
+mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources" "$APP_DIR/Contents/Helpers" "$WIDGET_DIR/Contents/MacOS"
 cp "$BIN_DIR/CodexControl" "$APP_DIR/Contents/MacOS/CodexControl"
 cp "$ROOT_DIR/Support/Info.plist" "$APP_DIR/Contents/Info.plist"
 cp "$ROOT_DIR/Support/CodexControl.icns" "$APP_DIR/Contents/Resources/CodexControl.icns"
@@ -34,6 +34,9 @@ cp "$ROOT_DIR/NOTICE" "$APP_DIR/Contents/Resources/NOTICE.txt"
 cp "$ROOT_DIR/Support/WidgetInfo.plist" "$WIDGET_DIR/Contents/Info.plist"
 
 SDK_PATH="$(xcrun --sdk macosx --show-sdk-path)"
+GEMINI_HELPER="$APP_DIR/Contents/Helpers/gemini-app-usage"
+xcrun --sdk macosx swiftc -O -sdk "$SDK_PATH" -target "$(uname -m)-apple-macos14.0" \
+  "${SWIFT_FLAGS[@]}" "$ROOT_DIR"/Support/GeminiApp/*.swift -o "$GEMINI_HELPER"
 xcrun --sdk macosx swiftc -parse-as-library -application-extension -O \
   -sdk "$SDK_PATH" -target "$(uname -m)-apple-macos14.0" \
   -module-name CodexControlWidget "${SWIFT_FLAGS[@]}" \
@@ -43,13 +46,14 @@ xcrun --sdk macosx swiftc -parse-as-library -application-extension -O \
   -o "$WIDGET_DIR/Contents/MacOS/CodexControlWidget"
 
 # Remove debug records and filesystem metadata before signing the distributable.
-xcrun strip -S "$APP_DIR/Contents/MacOS/CodexControl" "$WIDGET_DIR/Contents/MacOS/CodexControlWidget"
+xcrun strip -S "$APP_DIR/Contents/MacOS/CodexControl" "$WIDGET_DIR/Contents/MacOS/CodexControlWidget" "$GEMINI_HELPER"
 xattr -cr "$APP_DIR"
 SIGN_FLAGS=(--force --sign "$SIGNING_IDENTITY")
 if [[ "$SIGNING_IDENTITY" != "-" ]]; then
   SIGN_FLAGS+=(--options runtime --timestamp)
 fi
 codesign "${SIGN_FLAGS[@]}" --entitlements "$ROOT_DIR/Support/Widget.entitlements" "$WIDGET_DIR"
+codesign "${SIGN_FLAGS[@]}" --identifier com.ademisler.codexcontrol.gemini-app-usage "$GEMINI_HELPER"
 codesign "${SIGN_FLAGS[@]}" "$APP_DIR"
 codesign --verify --deep --strict "$APP_DIR"
 mkdir -p "$ROOT_DIR/Build"
