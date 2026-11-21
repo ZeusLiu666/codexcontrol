@@ -48,6 +48,9 @@ post = bind(user, "PostMessageW", wt.BOOL, wt.HWND, wt.UINT, wt.WPARAM, wt.LPARA
 menu_count = bind(user, "GetMenuItemCount", ctypes.c_int, wt.HMENU)
 menu_text = bind(user, "GetMenuStringW", ctypes.c_int, wt.HMENU, wt.UINT, wt.LPWSTR, ctypes.c_int, wt.UINT)
 
+menu_rect = bind(user, "GetMenuItemRect", wt.BOOL, wt.HWND, wt.HMENU, wt.UINT, ctypes.POINTER(wt.RECT))
+window_at = bind(user, "WindowFromPoint", wt.HWND, wt.POINT)
+
 
 def windows():
     handles = []
@@ -103,15 +106,48 @@ def quit_via_tray(pid):
         and text_of(get_class, hwnd) == "#32768"
     ), None))
     menu = send(popup, 0x01E1, 0, 0)  # MN_GETHMENU
-    # The native popup's last item is Quit. Verify the text, then exercise
-    # normal menu keyboard navigation without moving the runner's mouse.
-    last = menu_count(menu) - 1
-    label = ctypes.create_unicode_buffer(100)
-    if last < 0 or not menu_text(menu, last, label, len(label), 0x0400) or label.value != "Quit":
-        raise RuntimeError("Quit was missing from the packaged app's tray menu")
-    for key in (0x23, 0x0D):  # End, Enter
-        if not post(popup, 0x0100, key, 1):  # WM_KEYDOWN to the owning menu thread
-            raise ctypes.WinError()
+    # Invoke the same native menu item an assistive client would activate.
+    # Posting key messages directly does not drive TrackPopupMenuEx reliably.
+    invoke_quit = r"""
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName UIAutomationClient
+$menu = [System.Windows.Automation.AutomationElement]::FromHandle([IntPtr][int64]$env:SMOKE_MENU_HANDLE)
+$condition = [System.Windows.Automation.PropertyCondition]::new(
+    [System.Windows.Automation.AutomationElement]::NameProperty, 'Quit')
+$item = $menu.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condition)
+$action = $item.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
+$action.Invoke()
+"""
+    try:
+        result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", invoke_quit],
+                                env={**os.environ, "SMOKE_MENU_HANDLE": str(popup)}, timeout=10)
+        if result.returncode == 0:
+            wait_for("Quit selection", lambda: not is_visible(popup), timeout=3)
+            print("Invoked the tray Quit command via UI Automation", flush=True)
+            return
+    except (RuntimeError, subprocess.TimeoutExpired):
+        pass
+    if not is_visible(popup):
+        return
+    # Some desktops have no UI Automation proxy. Use the verified on-screen
+    # rectangle only if it still belongs to the same menu in our test process.
+    for index in range(menu_count(menu)):
+        label = ctypes.create_unicode_buffer(100)
+        menu_text(menu, index, label, len(label), 0x0400)  # MF_BYPOSITION
+        if label.value != "Quit":
+            continue
+        rect = wt.RECT()
+        if not menu_rect(None, menu, index, ctypes.byref(rect)):
+            break
+        point = wt.POINT((rect.left + rect.right) // 2, (rect.top + rect.bottom) // 2)
+        if window_at(point) != popup or not user.SetCursorPos(point.x, point.y):
+            break
+        user.mouse_event(0x0002, 0, 0, 0, 0)
+        user.mouse_event(0x0004, 0, 0, 0, 0)
+        wait_for("Quit selection", lambda: not is_visible(popup), timeout=5)
+        print("Clicked the verified native Quit item", flush=True)
+        return
+    raise RuntimeError("Could not activate Quit in the packaged app's tray menu")
 
 
 
@@ -127,6 +163,7 @@ def launch_and_quit(executable, env):
     finally:
         if process.poll() is None:
             subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], timeout=15)
+            process.wait(timeout=15)
     support = Path(env["APPDATA"]) / "CodexControl"
     if json.loads((support / "accounts.json").read_text())["accounts"] != []:
         raise RuntimeError("Expected an empty isolated account list")
@@ -140,7 +177,7 @@ def main(version):
         raise SystemExit("This installation smoke test requires a disposable GitHub-hosted Windows runner")
     artifacts = Path("ReleaseArtifacts").resolve()
     stem = f"CodexControl-{version}-windows-x64"
-    with tempfile.TemporaryDirectory(dir=os.environ["RUNNER_TEMP"]) as temp:
+    with tempfile.TemporaryDirectory(dir=os.environ["RUNNER_TEMP"], ignore_cleanup_errors=True) as temp:
         root = Path(temp)
         profile = root / "profile"
         env = os.environ.copy()
