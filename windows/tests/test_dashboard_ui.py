@@ -100,6 +100,46 @@ class DashboardTests(unittest.TestCase):
         self.app._toggle_selection(account.id); self.pump()
         self.assertIsNone(self.app.selected_account_id)
 
+    def test_escape_clears_search_and_keeps_focus_for_another_query(self):
+        self.app.search_entry.focus_force()
+        self.app.search_var.set('demo2')
+        self.pump(.2)
+        self.assertEqual(self.app.list_title.cget('text'), 'Accounts · 1 of 7')
+        self.assertTrue(self.app.clear_search_button.enabled)
+        self.app.search_entry.event_generate('<Escape>')
+        self.pump(.2)
+        self.assertEqual(self.app.search_var.get(), '')
+        self.assertIs(self.app.root.focus_get(), self.app.search_entry)
+        self.assertTrue(self.app.root.winfo_viewable())
+        self.assertEqual(len(self.scene.card_bounds), 7)
+        self.assertFalse(self.app.clear_search_button.enabled)
+
+    def test_scrollbar_tracks_an_intermediate_drag_without_running_ahead(self):
+        bar = self.app.scrollbar
+        self.app.canvas.yview_moveto(0)
+        self.pump(.04)
+        height = bar.winfo_height()
+        grip = (bar.thumb_top + bar.thumb_bottom) // 2
+        target = height // 2
+        self.assertLess(grip, target)
+        bar.event_generate('<ButtonPress-1>', x=2, y=grip)
+        bar.event_generate('<B1-Motion>', x=2, y=target)
+        self.pump(.04)
+        self.assertAlmostEqual((bar.thumb_top + bar.thumb_bottom) / 2, target, delta=2)
+        bar.event_generate('<B1-Motion>', x=2, y=height)
+        bar.event_generate('<ButtonRelease-1>', x=2, y=height)
+        self.pump(.04)
+        self.assertEqual(bar.thumb_bottom, height)
+        self.assertAlmostEqual(self.app.canvas.yview()[1], 1.0)
+
+    def test_local_status_replaces_a_previous_remote_tooltip(self):
+        self.app.remote_token_statuses = [dict(host='test-host', isAvailable=True, detail='Up to date')]
+        self.app._render_now()
+        self.assertIn('test-host', self.app.remote_tip.text)
+        self.app.remote_token_statuses = []
+        self.app._render_now()
+        self.assertEqual(self.app.remote_tip.text, 'Token usage is collected locally.')
+
     def test_edit_survives_background_refresh_and_saves(self):
         account = self.app.accounts[0]
         self.app._edit_account(account); self.pump()

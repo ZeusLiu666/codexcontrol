@@ -56,7 +56,7 @@ The official Inno Setup 6.5.3 compiler is required. The script checks its hash. 
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\windows\package_release.ps1 `
-  -Python .\.venv\Scripts\python.exe -Version 1.2.9 -InstallDependencies -Clean
+  -Python .\.venv\Scripts\python.exe -Version 1.4.1 -InstallDependencies -Clean
 ```
 
 If the script cannot find the compiler automatically, pass `-InnoSetupCompiler <path-to-ISCC.exe>`. It also accepts `-Python <path-to-python.exe>`. Outputs are written to `ReleaseArtifacts`:
@@ -143,7 +143,7 @@ powershell -ExecutionPolicy Bypass -File .\windows\build.ps1 `
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\windows\package_release.ps1 `
-  -Python .\.venv\Scripts\python.exe -Version 1.2.9 -InstallDependencies -Clean
+  -Python .\.venv\Scripts\python.exe -Version 1.4.1 -InstallDependencies -Clean
 ```
 
 如构建脚本无法自动找到编译器，传入 `-InnoSetupCompiler <ISCC.exe路径>`；也支持 `-Python <python.exe路径>`。输出位于 `ReleaseArtifacts`：

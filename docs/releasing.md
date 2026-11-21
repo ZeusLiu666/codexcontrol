@@ -57,9 +57,9 @@ With `CODE_SIGN_IDENTITY` and `NOTARY_KEYCHAIN_PROFILE`, the script can sign, no
 
 Put Windows installers, the Windows portable archive, macOS assets, and their checksums in the same version's Release in this repository. Document supported systems and architectures, upgrade/data-retention behavior, and each platform's validation scope.
 
-`.github/workflows/release.yml` is the tag-triggered release entry point. Before enabling it, confirm that it targets the current repository, builds the correct filenames, and obtains signing/publication credentials from appropriately scoped Secrets. Do not reuse another maintainer's repository target or private deployment credentials. Alternatively, prepare a draft Release with reviewed local builds, verify it, and publish it.
+For a joint release, add bilingual notes to `docs/releases/v<version>.md`, update both app versions and push a `v<version>-zeusliu.1` tag on the reviewed commit. The tag workflow tests both platforms, builds the macOS arm64 DMG and PKG and the Windows x64 installer and portable ZIP, and uploads all four installers and two checksum lists to a draft. Verify its tag and downloads before publishing the draft.
 
-For a Windows-only update, `.github/workflows/windows-release.yml` runs when the Windows `__version__` changes on `main`, or by manual dispatch from `main`. Add reviewed bilingual notes at `docs/releases/v<version>-windows.md`. It tests and builds that exact commit, verifies the three Windows attachments, creates a draft `v<version>-zeusliu.1` Release, and publishes it as a prerelease only after uploaded checksums match. It refuses to overwrite an already published version. This path leaves existing macOS downloads in their original Release.
+For a Windows-only update, change the Windows version and add reviewed bilingual notes at `docs/releases/v<version>-windows.md` in the same commit on `main`. Pushing those notes triggers the Windows-only workflow. Manual dispatch from `main` is also supported. This workflow uses the same pinned Windows toolchain and publishes a verified Windows prerelease.
 
 Deploying the website is not required to publish installers. Deploy only when you own the destination and have configured permission to deploy there. Do not describe the upstream domain as belonging to this repository.
 
@@ -134,9 +134,9 @@ swift test
 
 将 Windows 安装包、Windows 便携包、macOS 附件和各自校验文件放在本仓库同一版本 Release 下。描述中应说明支持的系统版本、架构、升级与数据保留行为，以及每个平台的测试范围。
 
-`.github/workflows/release.yml` 是标签触发的发布入口。启用之前确认它使用当前仓库上下文、构建正确的文件名，并且所有签名与发布凭据均来自适当权限的 Secrets；不要沿用他人的仓库目标或个人部署凭据。也可以先创建草稿 Release，上传经审查的本地构建附件，核对后发布。
+双平台发布时，将中英文说明写入 `docs/releases/v<版本>.md`，同步两个应用的版本，再推送指向已审阅提交的 `v<版本>-zeusliu.1` 标签。标签工作流测试两个平台，构建 macOS arm64 DMG 和 PKG、Windows x64 安装包和便携 ZIP，将四个安装文件及两份校验文件上传至同一份草稿。核对标签与下载文件后发布草稿。
 
-仅更新 Windows 时，修改 `main` 上的 Windows `__version__` 会触发 `.github/workflows/windows-release.yml`，也可以从 `main` 手动启动。请先在 `docs/releases/v<版本>-windows.md` 中准备中英文说明。流程测试并构建该次提交，校验三个 Windows 附件，创建 `v<版本>-zeusliu.1` 草稿 Release，上传后的哈希一致才发布为预发布版；已公开的版本不会被覆盖。此流程保留原 Release 中的 macOS 下载。
+仅更新 Windows 时，在 `main` 的同一提交中更新 Windows 版本并添加 `docs/releases/v<版本>-windows.md` 中英文说明。推送该说明会触发 Windows 专属流程，也可从 `main` 手动运行。该流程复用固定版本的 Windows 工具链，校验附件后公开 Windows 预发布版。
 
 网站源码和网站部署不属于安装包发布的必要步骤。只有拥有目标站点及明确配置的部署权限时才部署；不要在项目介绍中把上游域名描述为本仓库拥有。
 

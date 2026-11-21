@@ -103,7 +103,7 @@ class DashboardView:
         titles = tk.Frame(header, bg=p['shell'])
         self.title_label = self._label(titles, 'CodexControl', 'title')
         self.title_label.pack(anchor='w')
-        self.subtitle_label = self._label(titles, 'Your accounts, at a glance', 'caption', p['muted'])
+        self.subtitle_label = self._label(titles, '', 'caption', p['muted'])
         self.subtitle_label.pack(anchor='w', pady=(2, 0))
         controls = tk.Frame(header, bg=p['shell'])
         controls.pack(side='right')
@@ -140,7 +140,10 @@ class DashboardView:
                                      bg=p['panel'], fg=p['text'], insertbackground=p['accent'], font=self.fonts['body_small'])
         self.search_entry.pack(side='left', fill='x', expand=True)
         ToolTip(self.search_entry, 'Search by name or email · Ctrl+F')
-        self._icon_button(self.search_shell.inner, 'close', lambda: self.search_var.set(''), 'Clear search', size=24).pack(side='right')
+        self.search_entry.bind('<Escape>', self._clear_search, add='+')
+        self.clear_search_button = self._icon_button(
+            self.search_shell.inner, 'close', self._clear_search, 'Clear search · Esc', size=24)
+        self.clear_search_button.pack(side='right')
 
         self.notice = RoundedPanel(self.shell, fill=p['panel_alt'], border=p['hairline'], background=p['shell'], radius=12, padding=8)
         self.notice_label = self._label(self.notice.inner, '', 'caption', p['muted'], anchor='w')
@@ -150,8 +153,9 @@ class DashboardView:
 
         list_heading = tk.Frame(self.shell, bg=p['shell'])
         list_heading.pack(fill='x', pady=(0, 9))
-        self._label(list_heading, 'Accounts', 'body_small', p['muted']).pack(side='left')
-        self.list_status = self._label(list_heading, 'Auto refresh', 'caption', p['muted'])
+        self.list_title = self._label(list_heading, 'Accounts', 'body_small', p['text'])
+        self.list_title.pack(side='left')
+        self.list_status = self._label(list_heading, 'Quota refresh · 5 min', 'caption', p['muted'])
         self.list_status.pack(side='right')
         self.list_shell = tk.Frame(self.shell, bg=p['shell'])
         self.list_shell.pack(fill='both', expand=True)
@@ -160,7 +164,7 @@ class DashboardView:
         # Keep the tiny scrollbar functional without drawing a second frame.
         from .app import DarkScrollbar
         self.scrollbar = DarkScrollbar(self.list_shell, command=self.canvas.yview, palette=p, width=5)
-        self.scrollbar.pack(side='right', fill='y', padx=(7, 0))
+        self.scrollbar.pack(side='right', fill='y')
         self.canvas.configure(yscrollcommand=self._on_cards_scroll, yscrollincrement=0)
         # Cards share one buffered drawing surface. No native child windows are
         # mapped or resized when details open, close, or receive fresh data.
@@ -179,7 +183,7 @@ class DashboardView:
         self.remote_label = self._label(footer, 'Local tracking', 'caption', p['muted'])
         self.remote_label.pack(side='left')
         self.remote_tip = ToolTip(self.remote_label, 'Token usage is collected locally.')
-        self.footer_label = self._label(footer, 'Auto sync · 30s', 'caption', p['muted'])
+        self.footer_label = self._label(footer, 'Token scan · 30 s', 'caption', p['muted'])
         self.footer_label.pack(side='right')
         self.root.bind('<Control-r>', lambda _: self.refresh_all())
         self.root.bind('<Control-f>', self._focus_search)
@@ -246,6 +250,12 @@ class DashboardView:
         self.search_entry.focus_set()
         return 'break'
 
+    def _clear_search(self, event=None):
+        if self.search_var.get():
+            self.search_var.set('')
+            self.search_entry.focus_set()
+            return 'break'
+
     def _dismiss_notice(self):
         self._dismissed_status = self.status_message
         self.notice.pack_forget()
@@ -256,13 +266,16 @@ class DashboardView:
             return
         presentation = self._build_presentation_state()
         total = sum(s['today']['totalTokens'] for s in self.token_usage_states.values())
-        self.subtitle_label.configure(text=f'{compact(total)} tokens today  ·  Your workspace')
+        self.subtitle_label.configure(text=f'{compact(total)} tokens today')
         self.add_button.set_icon('close' if self.is_adding_account else 'plus')
         self.add_button.set_tooltip('Cancel account setup' if self.is_adding_account else 'Add account')
         switching = self._desktop_restart_busy or self._pending_switch_account_id is not None
         self.add_button.set_enabled(not switching and self.reauthenticating_account_id is None)
         self.refresh_button.set_enabled(not self.is_refreshing_all and not switching)
-        self.list_status.configure(text='Refreshing…' if self.is_refreshing_all else 'Auto refresh')
+        self.list_status.configure(text='Refreshing…' if self.is_refreshing_all else 'Quota refresh · 5 min')
+        self.list_title.configure(text=(f'Accounts · {len(presentation.filtered_accounts)} of {presentation.account_count}'
+                                        if presentation.search_query else 'Accounts'))
+        self.clear_search_button.set_enabled(bool(self.search_var.get()))
         self._render_metrics(presentation)
         if len(self.accounts) > 5 or self.search_var.get():
             if not self.search_shell.winfo_manager():
@@ -283,9 +296,12 @@ class DashboardView:
         if remote:
             available = all(s.get('isAvailable') for s in remote)
             self.remote_label.configure(text=('●  Remote connected' if available else '○  Remote offline'), fg=self.palette['success'] if available else self.palette['muted'])
-            self.remote_tip.set_text('\n'.join(f"{s['host']}: {s['detail']}" for s in remote) + '\nLocal usage continues to update.')
+            tracking_tip = '\n'.join(f"{s['host']}: {s['detail']}" for s in remote) + '\nLocal usage continues to update.'
         else:
             self.remote_label.configure(text='●  Local tracking', fg=self.palette['muted'])
+            tracking_tip = 'Token usage is collected locally.'
+        if self.remote_tip.text != tracking_tip:
+            self.remote_tip.set_text(tracking_tip)
         self._render_cards(presentation)
         self._update_tray(presentation)
 
@@ -405,9 +421,9 @@ class DashboardView:
         panel = RoundedPanel(self.cards_frame, fill=self.palette['panel'], border=self.palette['hairline'], background=self.palette['shell'], radius=18, padding=24)
         panel.pack(fill='x')
         self._icon(panel.inner, 'search' if query else 'plus', self.palette['accent'], 24).pack(pady=(6, 12))
-        self._label(panel.inner, 'No matching accounts' if query else 'A quieter way to manage Codex', 'headline').pack()
+        self._label(panel.inner, 'No matching accounts' if query else 'No accounts yet', 'headline').pack()
         self._label(panel.inner, 'Try another name or email.' if query else 'Add an account to see quota and token usage.', 'caption', self.palette['muted']).pack(pady=(8, 10))
-        ActionButton(panel.inner, text='Clear search' if query else 'Add account', icon='close' if query else 'plus', command=(lambda: self.search_var.set('')) if query else self.start_add_account,
+        ActionButton(panel.inner, text='Clear search' if query else 'Add account', icon='close' if query else 'plus', command=self._clear_search if query else self.start_add_account,
                      fill=self.palette['accent_soft'], foreground=self.palette['accent'], border=self.palette['accent_line'], background=self.palette['panel'], tooltip='Clear search' if query else 'Add a Codex account').pack(pady=5)
 
     def _build_account_card(self, parent, account, width_hint):

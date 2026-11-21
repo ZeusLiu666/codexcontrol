@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "1.2.9"
+  #define AppVersion "1.4.1"
 #endif
 #ifndef PayloadDir
   #error PayloadDir must point at the allowlisted release payload

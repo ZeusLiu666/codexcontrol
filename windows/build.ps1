@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$Python = 'python.exe',
-    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$Version = '1.2.9',
+    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$Version = '1.4.1',
     [switch]$InstallDependencies,
     [switch]$Clean
 )

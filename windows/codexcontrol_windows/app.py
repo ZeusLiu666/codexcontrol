@@ -230,7 +230,7 @@ class DarkScrollbar(tk.Canvas):
     ) -> None:
         super().__init__(
             parent,
-            width=width,
+            width=width + 7,
             highlightthickness=0,
             bd=0,
             relief="flat",
@@ -247,7 +247,10 @@ class DarkScrollbar(tk.Canvas):
         self.thumb_bottom = 0
         self.drag_offset = 0
         self.dragging = False
+        self.hovering = False
 
+        self.bind("<Enter>", self._on_hover)
+        self.bind("<Leave>", self._on_hover)
         self.bind("<Configure>", self._redraw)
         self.bind("<Button-1>", self._on_press)
         self.bind("<B1-Motion>", self._on_drag)
@@ -261,6 +264,8 @@ class DarkScrollbar(tk.Canvas):
         self._redraw()
 
     def _on_press(self, event: tk.Event[Any]) -> None:
+        if self.last - self.first >= 1:
+            return
         if self.thumb_top <= event.y <= self.thumb_bottom:
             self.dragging = True
             self.drag_offset = event.y - self.thumb_top
@@ -272,36 +277,43 @@ class DarkScrollbar(tk.Canvas):
         if not self.dragging:
             return
 
-        height = max(1, self.winfo_height())
-        thumb_size = max(24, self.thumb_bottom - self.thumb_top)
-        track = max(1, height - thumb_size)
-        top = min(max(0, event.y - self.drag_offset), track)
-        first = top / track if track else 0.0
-        self.command("moveto", str(first))
+        self._move_thumb(event.y - self.drag_offset)
 
     def _on_release(self, _: tk.Event[Any]) -> None:
         self.dragging = False
+        self._redraw()
+
+    def _on_hover(self, event: tk.Event[Any]) -> None:
+        self.hovering = event.type == tk.EventType.Enter
+        self._redraw()
 
     def _jump_to(self, y: int) -> None:
-        height = max(1, self.winfo_height())
-        visible = max(0.05, self.last - self.first)
-        thumb_size = max(24, int(height * visible))
-        track = max(1, height - thumb_size)
-        target = min(max(0, y - (thumb_size // 2)), track)
-        first = target / track if track else 0.0
-        self.command("moveto", str(first))
+        self._move_thumb(y - (self.thumb_bottom - self.thumb_top) / 2)
+
+    def _move_thumb(self, top: float) -> None:
+        travel = self.winfo_height() - (self.thumb_bottom - self.thumb_top)
+        if travel > 0:
+            position = max(0.0, min(1.0, top / travel))
+            self.command("moveto", position * (1 - (self.last - self.first)))
 
     def _redraw(self, _: Any = None) -> None:
         self.delete("all")
         height = max(1, self.winfo_height())
-        if self.last - self.first >= .999:
+        visible = self.last - self.first
+        if visible >= 1:
+            self.thumb_top = self.thumb_bottom = 0
+            self.dragging = False
+            self.configure(cursor="arrow")
             return
-        self.thumb_top = int(height * self.first)
-        self.thumb_bottom = max(self.thumb_top + 26, int(height * self.last))
-        width = self.bar_width
-        self.create_line(width / 2, self.thumb_top + width / 2, width / 2,
-                         self.thumb_bottom - width / 2, fill=self.palette["hairline"],
-                         width=width, capstyle="round")
+        self.configure(cursor="hand2")
+        thumb_size = min(height, max(26, round(height * visible)))
+        self.thumb_top = round((height - thumb_size) * self.first / (1 - visible))
+        self.thumb_bottom = self.thumb_top + thumb_size
+        width = min(self.bar_width, thumb_size)
+        x = self.winfo_width() / 2
+        color = self.palette["muted"] if self.hovering or self.dragging else self.palette["track"]
+        self.create_line(x, self.thumb_top + width / 2, x, self.thumb_bottom - width / 2,
+                         fill=color, width=width, capstyle="round")
 
 
 class CodexControlWindowsApp(DashboardView):

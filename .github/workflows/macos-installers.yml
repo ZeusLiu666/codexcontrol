@@ -2,6 +2,7 @@ name: Build sanitized macOS installers
 
 on:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -13,8 +14,21 @@ jobs:
       - uses: actions/checkout@v5
       - name: Check source privacy
         run: python3 tools/release_privacy_check.py
-      - name: Test macOS app
-        run: swift test
+      - name: Validate release version and architecture
+        shell: bash
+        run: |
+          test "$(uname -m)" = arm64
+          version=$(plutil -extract CFBundleShortVersionString raw Support/Info.plist)
+          test "$version" = "$(plutil -extract CFBundleShortVersionString raw Support/WidgetInfo.plist)"
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            test "$GITHUB_REF_NAME" = "v${version}-zeusliu.1"
+          fi
+          echo "RELEASE_VERSION=$version" >> "$GITHUB_ENV"
+      - name: Test macOS app and Gemini quota parser
+        run: |
+          swift test
+          swiftc Support/GeminiApp/QuotaPanel.swift Tests/GeminiApp/QuotaPanelTests.swift -o "$RUNNER_TEMP/quota-tests"
+          "$RUNNER_TEMP/quota-tests"
       - name: Build app and installers without local extended attributes
         run: |
           ./Scripts/package_app.sh
@@ -23,7 +37,11 @@ jobs:
           ./Scripts/build_installers.sh
       - name: Check installed package metadata
         run: |
-          pkgutil --expand-full ReleaseArtifacts/CodexControl-1.2.8-macos-arm64.pkg "$RUNNER_TEMP/expanded-package"
+          cd ReleaseArtifacts
+          shasum -a 256 -c SHA256SUMS.txt
+          mv SHA256SUMS.txt SHA256SUMS-macos.txt
+          hdiutil verify "CodexControl-$RELEASE_VERSION-macos-arm64.dmg"
+          pkgutil --expand-full "CodexControl-$RELEASE_VERSION-macos-arm64.pkg" "$RUNNER_TEMP/expanded-package"
           if grep -R -a -l 'com.apple.provenance' "$RUNNER_TEMP/expanded-package"; then
             echo 'Unexpected provenance metadata in package'
             exit 1
@@ -34,5 +52,5 @@ jobs:
           path: |
             ReleaseArtifacts/*.dmg
             ReleaseArtifacts/*.pkg
-            ReleaseArtifacts/SHA256SUMS.txt
+            ReleaseArtifacts/SHA256SUMS-macos.txt
           if-no-files-found: error

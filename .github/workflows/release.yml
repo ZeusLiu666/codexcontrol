@@ -7,70 +7,81 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: codexcontrol-release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   macos:
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@v5
-      - name: Check public source
-        run: python3 tools/release_privacy_check.py
-      - name: Test macOS
-        run: swift test
-      - name: Build macOS archive
-        run: ./Scripts/build_release_artifacts.sh
-      - uses: actions/upload-artifact@v4
-        with:
-          name: macos-release
-          path: ReleaseArtifacts/CodexControl-macos.zip*
-          if-no-files-found: error
+    uses: ./.github/workflows/macos-installers.yml
 
   windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install build dependencies
-        run: python -m pip install -r windows/requirements-build.txt
-      - name: Check public source
-        run: python tools/release_privacy_check.py
-      - name: Test Windows
-        run: python -m unittest discover -s windows/tests -v
-        env:
-          PYTHONPATH: windows
-      - name: Install official installer compiler
-        shell: pwsh
-        run: choco install innosetup --version=6.5.3 --no-progress -y
-      - name: Build Windows installer and portable archive
-        shell: pwsh
-        run: |
-          $version = $env:GITHUB_REF_NAME -replace '^v(\d+\.\d+\.\d+).*$', '$1'
-          ./windows/package_release.ps1 -Clean -Version $version
-      - uses: actions/upload-artifact@v4
-        with:
-          name: windows-release
-          path: |
-            ReleaseArtifacts/*Setup.exe
-            ReleaseArtifacts/*portable.zip
-            ReleaseArtifacts/SHA256SUMS-windows.txt
-          if-no-files-found: error
+    uses: ./.github/workflows/windows-artifacts.yml
 
-  publish:
+  draft:
     needs: [macos, windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ needs.windows.outputs.tag }}
+      VERSION: ${{ needs.windows.outputs.version }}
     steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: actions/download-artifact@v4
         with:
+          name: sanitized-macos-installers
           path: release-assets
-          merge-multiple: true
-      - name: Publish tested platform assets to the same repository
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          TAG: ${{ github.ref_name }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.windows.outputs.artifact }}
+          path: release-assets
+      - name: Verify downloads and stage the release for review
+        shell: bash
         run: |
-          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "CodexControl ${TAG#v} · macOS + Windows" --generate-notes
-          gh release upload "$TAG" release-assets/* --clobber
+          set -euo pipefail
+          notes="$PWD/docs/releases/v$VERSION.md"
+          test -s "$notes"
+          test "$(gh api "repos/$GH_REPO/commits/$TAG" --jq .sha)" = "$(git rev-parse HEAD)"
+          cd release-assets
+          files=(
+            "CodexControl-$VERSION-macos-arm64.dmg"
+            "CodexControl-$VERSION-macos-arm64.pkg"
+            "CodexControl-$VERSION-windows-x64-Setup.exe"
+            "CodexControl-$VERSION-windows-x64-portable.zip"
+            SHA256SUMS-macos.txt SHA256SUMS-windows.txt
+          )
+          sha256sum -c SHA256SUMS-macos.txt
+          sha256sum -c SHA256SUMS-windows.txt
+          test "$(jq -r .commit release-build.json)" = "$(git rev-parse HEAD)"
+          test "$(jq -r .tag release-build.json)" = "$TAG"
+          # Preserve completed releases and any files uploaded during an earlier attempt.
+          draft=$(gh api --paginate "repos/$GH_REPO/releases?per_page=100" |
+            jq -rs --arg tag "$TAG" '[.[][] | select(.tag_name == $tag)] | if length > 1 then error("duplicate release") else .[0] // empty end')
+          if [[ -z "$draft" ]]; then
+            gh release create "$TAG" --draft --verify-tag --target "$(git rev-parse HEAD)" \
+              --title "CodexControl $VERSION · macOS + Windows" --notes-file "$notes"
+          else
+            jq -e --arg sha "$(git rev-parse HEAD)" '.draft and .target_commitish == $sha' <<< "$draft" >/dev/null
+          fi
+          for file in "${files[@]}"; do
+            digest=$(sha256sum "$file" | cut -d' ' -f1)
+            remote=$(jq -r --arg name "$file" '.assets[]? | select(.name == $name) | .digest' <<< "$draft")
+            if [[ -z "$remote" ]]; then
+              gh release upload "$TAG" "$file"
+            else
+              test "$remote" = "sha256:$digest"
+            fi
+          done
+          # Verify the exact six GitHub asset names and digests, including both checksum lists.
+          gh release view "$TAG" --json isDraft,assets > "$RUNNER_TEMP/release.json"
+          jq -e '.isDraft and (.assets | length == 6)' "$RUNNER_TEMP/release.json" >/dev/null
+          for file in "${files[@]}"; do
+            hash=$(sha256sum "$file" | cut -d' ' -f1)
+            jq -e --arg name "$file" --arg hash "sha256:$hash" \
+              'any(.assets[]; .name == $name and .digest == $hash)' "$RUNNER_TEMP/release.json" >/dev/null
+          done

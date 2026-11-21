@@ -332,10 +332,10 @@ class AccountCanvasScene:
         query = self.app.search_var.get()
         self._surface(0, 0, width, 190, p['panel'], p['hairline'], p['shell'], radius=18)
         self._icon(width/2-12, 24, 'search' if query else 'plus', p['accent'], 24)
-        self._text(width/2, 62, 'No matching accounts' if query else 'A quieter way to manage Codex', 'headline', anchor='n')
+        self._text(width/2, 62, 'No matching accounts' if query else 'No accounts yet', 'headline', anchor='n')
         self._text(width/2, 93, 'Try another name or email.' if query else 'Add an account to see quota and token usage.', 'caption', p['muted'], anchor='n')
         title = 'Clear search' if query else 'Add account'
-        command = (lambda: self.app.search_var.set('')) if query else self.app.start_add_account
+        command = self.app._clear_search if query else self.app.start_add_account
         button_w = self._font('button').measure(title)+28
         self._surface((width-button_w)/2, 129, button_w, 34, p['accent_soft'], p['accent_line'], p['panel'], radius=9)
         self._text(width/2, 146, title, 'button', p['accent'], anchor='center')
